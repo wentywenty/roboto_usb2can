@@ -2,30 +2,31 @@
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/uart.h>
 #include <zephyr/logging/log.h>
+#ifdef CONFIG_USB_DEVICE_STACK_NEXT
+#include <zephyr/usb/usbd.h>
+#else
 #include <zephyr/usb/usb_device.h>
+#endif
 #include <cannectivity/usb/class/gs_usb.h>
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
 static const struct device *uart_dev = DEVICE_DT_GET(DT_NODELABEL(usart1));
 
-// static void uart_rx_callback(const struct device *dev, void *user_data)
-// {
-//     uint8_t c;
+#ifdef CONFIG_USB_DEVICE_STACK_NEXT
+/* 新版 USB 栈：定义 USB 设备上下文 */
+USBD_DEVICE_DEFINE(usbd, DEVICE_DT_GET(DT_NODELABEL(zephyr_udc0)), 0x1D50, 0x606F);
 
-//     if (!uart_irq_update(uart_dev)) {
-//         return;
-//     }
+USBD_DESC_LANG_DEFINE(lang);
+USBD_DESC_MANUFACTURER_DEFINE(mfr, "flora");
+USBD_DESC_PRODUCT_DEFINE(product, "roboparty CAN FD");
+USBD_DESC_SERIAL_NUMBER_DEFINE(sn);
+USBD_DESC_CONFIG_DEFINE(fs_config_desc, "Full-Speed Configuration");
+USBD_DESC_CONFIG_DEFINE(hs_config_desc, "High-Speed Configuration");
 
-//     if (!uart_irq_rx_ready(uart_dev)) {
-//         return;
-//     }
-
-//     /* Read received data and echo back */
-//     while (uart_fifo_read(uart_dev, &c, 1) == 1) {
-//         uart_poll_out(uart_dev, c);  /* Echo */
-//     }
-// }
+USBD_CONFIGURATION_DEFINE(fs_config, 0, 250, &fs_config_desc);
+USBD_CONFIGURATION_DEFINE(hs_config, 0, 250, &hs_config_desc);
+#endif
 
 static int uart_init(void)
 {
@@ -33,10 +34,6 @@ static int uart_init(void)
         LOG_ERR("UART device not ready");
         return -1;
     }
-
-    /* Configure interrupt driven mode */
-    // uart_irq_callback_set(uart_dev, uart_rx_callback);
-    // uart_irq_rx_enable(uart_dev);
 
     printk("UART1 echo enabled on PA9(TX)/PA10(RX) @ 115200\n");
     return 0;
@@ -71,12 +68,69 @@ int main(void)
         return err;
     }
 
-    /* 初始化 USB 设备 */
+#ifdef CONFIG_USB_DEVICE_STACK_NEXT
+    /* 新版 USB 栈初始化 */
+    err = usbd_add_descriptor(&usbd, &lang);
+    if (err != 0) {
+        LOG_ERR("failed to add language descriptor (err %d)", err);
+        return err;
+    }
+
+    err = usbd_add_descriptor(&usbd, &mfr);
+    if (err != 0) {
+        LOG_ERR("failed to add manufacturer descriptor (err %d)", err);
+        return err;
+    }
+
+    err = usbd_add_descriptor(&usbd, &product);
+    if (err != 0) {
+        LOG_ERR("failed to add product descriptor (err %d)", err);
+        return err;
+    }
+
+    err = usbd_add_descriptor(&usbd, &sn);
+    if (err != 0) {
+        LOG_ERR("failed to add serial number descriptor (err %d)", err);
+        return err;
+    }
+
+    err = usbd_add_configuration(&usbd, USBD_SPEED_FS, &fs_config);
+    if (err != 0) {
+        LOG_ERR("failed to add full-speed configuration (err %d)", err);
+        return err;
+    }
+
+    err = usbd_register_class(&usbd, "gs_usb_0", USBD_SPEED_FS, 1);
+    if (err != 0) {
+        LOG_ERR("failed to register gs_usb class (err %d)", err);
+        return err;
+    }
+
+    err = usbd_device_set_code_triple(&usbd, USBD_SPEED_FS, 0, 0, 0);
+    if (err != 0) {
+        LOG_ERR("failed to set code triple (err %d)", err);
+        return err;
+    }
+
+    err = usbd_init(&usbd);
+    if (err != 0) {
+        LOG_ERR("failed to initialize USB device (err %d)", err);
+        return err;
+    }
+
+    err = usbd_enable(&usbd);
+    if (err != 0) {
+        LOG_ERR("failed to enable USB device (err %d)", err);
+        return err;
+    }
+#else
+    /* 旧版 USB 栈 */
     err = usb_enable(NULL);
     if (err != 0) {
         LOG_ERR("failed to enable USB (err %d)", err);
         return err;
     }
+#endif
 
     LOG_INF("roboparty CAN FD initialized with %u channels", ARRAY_SIZE(channels));
 
