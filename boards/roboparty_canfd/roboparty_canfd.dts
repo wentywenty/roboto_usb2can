@@ -22,8 +22,8 @@
     };
 
     aliases {
-        led0 = &led_stat;
-        led1 = &led_word;
+        led0 = &led_stat;           // 主状态指示灯
+        mcuboot-led0 = &led_word;   // DFU 指示灯
     };
 
     leds {
@@ -61,15 +61,15 @@
         channel0 {
             compatible = "cannectivity-channel";
             can-controller = <&fdcan1>;
-            state-led = <&led_stat>;
-            activity-leds = <&led_stat>;
+            // state-led = <&led_stat>;
+            // activity-leds = <&led_stat>;
         };
 
         channel1 {
             compatible = "cannectivity-channel";
             can-controller = <&fdcan2>;
-            state-led = <&led_word>;
-            activity-leds = <&led_word>;
+            // state-led = <&led_word>;
+            // activity-leds = <&led_word>;
         };
     };
 };
