@@ -6,6 +6,7 @@
 #include <zephyr/usb/msos_desc.h>
 #include <zephyr/sys/byteorder.h>
 #include <cannectivity/usb/class/gs_usb.h>
+#include "status_led.h" 
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
@@ -148,6 +149,18 @@ int main(void)
     int err;
 
     printk("*** roboparty CAN FD adapter with WinUSB ***\n");
+
+    /* ✅ 初始化状态 LED */
+    err = status_led_init();
+    if (err != 0) {
+        LOG_WRN("Status LED init failed: %d", err);
+    } else {
+        status_led_set(LED_STATUS_INIT);  // 初始化闪烁 3 次
+    }
+
+    /* 等待初始化闪烁完成 */
+    k_msleep(100);
+    status_led_set(LED_STATUS_IDLE);  // 切换到空闲状态
 
     /* 初始化 UART */
     err = uart_init();
