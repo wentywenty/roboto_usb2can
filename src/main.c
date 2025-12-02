@@ -137,6 +137,52 @@ static int uart_init(void)
     return 0;
 }
 
+/* ==================== CAN 活动回调 ==================== */
+
+static int can_event_callback(const struct device *dev, uint16_t ch, 
+                               enum gs_usb_event event, void *user_data)
+{
+    ARG_UNUSED(dev);
+    ARG_UNUSED(user_data);
+
+    switch (event) {
+    case GS_USB_EVENT_CHANNEL_STARTED:
+        LOG_INF("CAN channel %u started", ch);
+        status_led_set(LED_STATUS_USB_READY);  // USB 就绪，等待通信
+        break;
+
+    case GS_USB_EVENT_CHANNEL_STOPPED:
+        LOG_INF("CAN channel %u stopped", ch);
+        status_led_set(LED_STATUS_IDLE);  // 回到空闲状态
+        break;
+
+    case GS_USB_EVENT_CHANNEL_ACTIVITY_RX:
+        LOG_DBG("CAN RX on channel %u", ch);
+        status_led_can_activity();  // 闪烁指示接收
+        break;
+
+    case GS_USB_EVENT_CHANNEL_ACTIVITY_TX:
+        LOG_DBG("CAN TX on channel %u", ch);
+        status_led_can_activity();  // 闪烁指示发送
+        break;
+
+    case GS_USB_EVENT_CHANNEL_ERROR_ON:
+        LOG_WRN("CAN error on channel %u", ch);
+        status_led_set(LED_STATUS_ERROR);  // 错误状态
+        break;
+
+    case GS_USB_EVENT_CHANNEL_ERROR_OFF:
+        LOG_INF("CAN error cleared on channel %u", ch);
+        status_led_set(LED_STATUS_USB_READY);  // 恢复正常
+        break;
+
+    default:
+        break;
+    }
+
+    return 0;
+}
+
 /* ==================== 主函数 ==================== */
 
 int main(void)
@@ -174,8 +220,12 @@ int main(void)
         return -1;
     }
 
-    /* 注册 gs_usb 通道 */
-    err = gs_usb_register(gs_usb, channels, ARRAY_SIZE(channels), NULL, NULL);
+    /* 注册 gs_usb 通道（带回调） */
+    struct gs_usb_ops ops = {
+        .event = can_event_callback,  // ← 注册事件回调
+    };
+
+    err = gs_usb_register(gs_usb, channels, ARRAY_SIZE(channels), &ops, NULL);
     if (err != 0) {
         LOG_ERR("failed to register gs_usb (err %d)", err);
         return err;

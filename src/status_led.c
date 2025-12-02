@@ -32,7 +32,7 @@ static const struct led_pattern led_patterns[] = {
     [LED_STATUS_IDLE]       = {100, 1900, -1},   // 慢闪（2秒周期）
     [LED_STATUS_USB_READY]  = {500, 500, -1},    // 中速闪（1秒周期）
     [LED_STATUS_CAN_ACTIVE] = {50, 50, 1},       // 短闪 1 次（CAN 活动）
-    [LED_STATUS_ERROR]      = {100, 100, -1},    // 快速闪烁（错误）
+    [LED_STATUS_ERROR]      = {100, 100, 20},    // 快速闪烁 20 次（约 4 秒）
 };
 
 /* LED 硬件定义 */
@@ -42,6 +42,7 @@ static const struct gpio_dt_spec status_led =
 /* 工作队列 */
 static struct k_work_delayable led_work;
 static enum led_status current_status = LED_STATUS_INIT;
+static enum led_status previous_status = LED_STATUS_IDLE;  // ✅ 记录进入错误前的状态
 static int current_repeat_count = 0;
 static bool led_state = false;
 
@@ -65,8 +66,15 @@ static void led_blink_work(struct k_work *work)
         if (pattern->repeat > 0) {
             current_repeat_count++;
             if (current_repeat_count >= pattern->repeat) {
-                /* 完成指定次数，停止 */
+                /* 完成指定次数 */
                 gpio_pin_set_dt(&status_led, 0);
+                
+                /* ✅ 错误状态超时后自动恢复 */
+                if (current_status == LED_STATUS_ERROR) {
+                    LOG_INF("Error indication timeout, restoring to %s",
+                            previous_status == LED_STATUS_USB_READY ? "USB_READY" : "IDLE");
+                    status_led_set(previous_status);
+                }
                 return;
             }
         }
@@ -108,6 +116,12 @@ void status_led_set(enum led_status status)
     if (status >= ARRAY_SIZE(led_patterns)) {
         LOG_ERR("Invalid LED status: %d", status);
         return;
+    }
+
+    /* ✅ 进入错误状态前保存当前状态 */
+    if (status == LED_STATUS_ERROR && current_status != LED_STATUS_ERROR) {
+        previous_status = current_status;
+        LOG_DBG("Entering error state, saved previous: %d", previous_status);
     }
 
     /* 取消当前闪烁 */
