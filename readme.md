@@ -1,1 +1,2 @@
+![alt text](image.png)
 pyinstaller --onefile --windowed --name="RobopartyCAN" --add-binary="libusb-1.0.dll;." --icon=icon.ico scripts/roboparty_can_tool.py 

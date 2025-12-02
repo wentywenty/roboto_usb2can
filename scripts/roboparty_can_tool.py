@@ -51,39 +51,29 @@ class CANFrame:
     @staticmethod
     def from_bytes(data):
         """从字节流解包"""
-        # ✅ 调试:打印原始数据
-        print(f"[DEBUG] Received {len(data)} bytes: {data[:20].hex() if len(data) >= 20 else data.hex()}")
-        
-        # ✅ 修正:帧头实际需要 16 字节 (echo_id + can_id + dlc + ch + flags + reserved + 2字节对齐)
-        if len(data) < 16:
-            print(f"[ERROR] Frame too short: {len(data)} < 16")
+        if len(data) < 12:
             return None
         
         frame = CANFrame()
         
         try:
-            # 帧头结构: 4+4+1+1+1+1 = 12 字节 + 4字节填充 = 16字节
             frame.echo_id, frame.can_id, frame.can_dlc, frame.channel, frame.flags, frame.reserved = \
-                struct.unpack('<IIBBBB', data[:12])  # ← 改为 12 字节
+                struct.unpack('<IIBBBB', data[:12])
             
-            # 数据部分从第 16 字节开始 (12字节头 + 4字节填充)
-            data_offset = 16
+            data_offset = 12
             if len(data) >= data_offset + frame.can_dlc:
-                frame.data = bytearray(data[data_offset:data_offset+frame.can_dlc])
+                frame.data[:frame.can_dlc] = data[data_offset:data_offset+frame.can_dlc]
             else:
-                print(f"[WARN] Data truncated: expected {frame.can_dlc} bytes, got {len(data)-data_offset}")
-                frame.data = bytearray(data[data_offset:])
-            
-            print(f"[DEBUG] Parsed: echo_id=0x{frame.echo_id:08X}, id=0x{frame.can_id:03X}, "
-                f"dlc={frame.can_dlc}, ch={frame.channel}")
+                available = len(data) - data_offset
+                if available > 0:
+                    frame.data[:available] = data[data_offset:]
             
             return frame
             
-        except struct.error as e:
-            print(f"[ERROR] Unpack failed: {e}")
+        except struct.error:
             return None
 
-# 比特率配置 (1Mbps 示例)
+# 比特率配置 (1Mbps)
 BITRATE_1M = {
     'prop_seg': 15,
     'phase_seg1': 15,
@@ -95,8 +85,8 @@ BITRATE_1M = {
 class RobopartyCAN:
     def __init__(self):
         self.dev = None
-        self.ep_in = None   # 改为 None，自动检测
-        self.ep_out = None  # 改为 None，自动检测
+        self.ep_in = None
+        self.ep_out = None
         self.is_open = False
         self.rx_thread = None
         self.rx_running = False
@@ -108,7 +98,6 @@ class RobopartyCAN:
         if self.dev is None:
             raise ValueError(f"Device not found (VID=0x{vid:04X}, PID=0x{pid:04X})")
         
-        # Claim interface 0
         try:
             if self.dev.is_kernel_driver_active(0):
                 self.dev.detach_kernel_driver(0)
@@ -117,11 +106,9 @@ class RobopartyCAN:
         
         usb.util.claim_interface(self.dev, 0)
         
-        # ✅ 自动检测端点地址
         cfg = self.dev.get_active_configuration()
-        intf = cfg[(0, 0)]  # Interface 0, Alternate Setting 0
+        intf = cfg[(0, 0)]
         
-        # 查找 Bulk IN 和 Bulk OUT 端点
         ep_in = None
         ep_out_list = []
         
@@ -129,11 +116,9 @@ class RobopartyCAN:
             if usb.util.endpoint_direction(ep.bEndpointAddress) == usb.util.ENDPOINT_IN:
                 if usb.util.endpoint_type(ep.bmAttributes) == usb.util.ENDPOINT_TYPE_BULK:
                     ep_in = ep.bEndpointAddress
-                    print(f"Found Bulk IN endpoint: 0x{ep_in:02X}")
             else:
                 if usb.util.endpoint_type(ep.bmAttributes) == usb.util.ENDPOINT_TYPE_BULK:
                     ep_out_list.append(ep.bEndpointAddress)
-                    print(f"Found Bulk OUT endpoint: 0x{ep.bEndpointAddress:02X}")
         
         if ep_in is None:
             raise ValueError("Bulk IN endpoint not found")
@@ -142,10 +127,7 @@ class RobopartyCAN:
             raise ValueError("Bulk OUT endpoint not found")
         
         self.ep_in = ep_in
-        # 使用最后一个 OUT 端点（兼容 COMPATIBILITY_MODE）
         self.ep_out = ep_out_list[-1]
-        
-        print(f"Using endpoints: IN=0x{self.ep_in:02X}, OUT=0x{self.ep_out:02X}")
         
         self.is_open = True
         return True
@@ -167,38 +149,17 @@ class RobopartyCAN:
                            bitrate_config['sjw'],
                            bitrate_config['brp'])
         
-        self.dev.ctrl_transfer(
-            0x41,  # bmRequestType: OUT, Vendor, Interface
-            GS_USB_REQUEST_BITTIMING,
-            channel,
-            0,
-            data
-        )
-        print(f"Channel {channel} bitrate configured")
+        self.dev.ctrl_transfer(0x41, GS_USB_REQUEST_BITTIMING, channel, 0, data)
     
     def start_channel(self, channel):
         """启动 CAN 通道"""
         data = struct.pack('<II', GS_USB_CHANNEL_MODE_START, 0)
-        self.dev.ctrl_transfer(
-            0x41,
-            GS_USB_REQUEST_MODE,
-            channel,
-            0,
-            data
-        )
-        print(f"Channel {channel} started")
+        self.dev.ctrl_transfer(0x41, GS_USB_REQUEST_MODE, channel, 0, data)
     
     def stop_channel(self, channel):
         """停止 CAN 通道"""
         data = struct.pack('<II', GS_USB_CHANNEL_MODE_RESET, 0)
-        self.dev.ctrl_transfer(
-            0x41,
-            GS_USB_REQUEST_MODE,
-            channel,
-            0,
-            data
-        )
-        print(f"Channel {channel} stopped")
+        self.dev.ctrl_transfer(0x41, GS_USB_REQUEST_MODE, channel, 0, data)
     
     def send_frame(self, channel, can_id, data):
         """发送 CAN 帧"""
@@ -216,7 +177,7 @@ class RobopartyCAN:
             data = self.dev.read(self.ep_in, 512, timeout=timeout)
             return CANFrame.from_bytes(bytes(data))
         except usb.core.USBError as e:
-            if e.errno == 110:  # Timeout
+            if e.errno == 110:
                 return None
             raise
     
@@ -241,7 +202,6 @@ class RobopartyCAN:
                 if frame and self.rx_callback:
                     self.rx_callback(frame)
             except usb.core.USBTimeoutError:
-                # 超时是正常的,继续循环
                 continue
             except Exception as e:
                 print(f"RX error: {e}")
@@ -256,13 +216,13 @@ class CANToolGUI:
         
         self.can = RobopartyCAN()
         self.rx_queue = Queue()
+        self.channels_started = False
         
         self._create_widgets()
         self._update_rx_display()
     
     def _create_widgets(self):
         """创建界面组件"""
-        # 顶部控制栏
         control_frame = ttk.Frame(self.root, padding="5")
         control_frame.pack(fill=tk.X)
         
@@ -272,52 +232,48 @@ class CANToolGUI:
         self.status_label = ttk.Label(control_frame, text="未连接", foreground="red")
         self.status_label.pack(side=tk.LEFT, padx=20)
         
-        # 通道选择和比特率
-        ttk.Label(control_frame, text="通道:").pack(side=tk.LEFT, padx=5)
-        self.channel_var = tk.IntVar(value=0)
-        ttk.Radiobutton(control_frame, text="CAN0", variable=self.channel_var, value=0).pack(side=tk.LEFT)
-        ttk.Radiobutton(control_frame, text="CAN1", variable=self.channel_var, value=1).pack(side=tk.LEFT)
-        
         ttk.Label(control_frame, text="比特率:").pack(side=tk.LEFT, padx=10)
         self.bitrate_var = tk.StringVar(value="1000000")
         ttk.Combobox(control_frame, textvariable=self.bitrate_var, width=10,
-                     values=["125000", "250000", "500000", "1000000"]).pack(side=tk.LEFT)
+                     values=["125000", "250000", "500000", "1000000"], state="readonly").pack(side=tk.LEFT)
         
-        ttk.Button(control_frame, text="启动", command=self.start_channel).pack(side=tk.LEFT, padx=5)
-        ttk.Button(control_frame, text="停止", command=self.stop_channel).pack(side=tk.LEFT)
-        
-        # ✅ 修改按钮布局
-        ttk.Button(control_frame, text="启动全部", command=self.start_all_channels, 
-                style="Accent.TButton").pack(side=tk.LEFT, padx=5)
-        ttk.Button(control_frame, text="停止全部", command=self.stop_all_channels).pack(side=tk.LEFT)
+        ttk.Button(control_frame, text="启动通道", command=self.start_all_channels).pack(side=tk.LEFT, padx=10)
+        ttk.Button(control_frame, text="停止通道", command=self.stop_all_channels).pack(side=tk.LEFT)
         
         # 发送区域
         send_frame = ttk.LabelFrame(self.root, text="发送 CAN 帧", padding="10")
         send_frame.pack(fill=tk.X, padx=10, pady=5)
         
-        ttk.Label(send_frame, text="CAN ID (hex):").grid(row=0, column=0, sticky=tk.W, pady=5)
+        # 通道选择(仅用于发送)
+        ttk.Label(send_frame, text="发送通道:").grid(row=0, column=0, sticky=tk.W, pady=5)
+        self.send_channel_var = tk.IntVar(value=0)
+        channel_frame = ttk.Frame(send_frame)
+        channel_frame.grid(row=0, column=1, sticky=tk.W)
+        ttk.Radiobutton(channel_frame, text="CAN0", variable=self.send_channel_var, value=0).pack(side=tk.LEFT, padx=5)
+        ttk.Radiobutton(channel_frame, text="CAN1", variable=self.send_channel_var, value=1).pack(side=tk.LEFT)
+        
+        ttk.Label(send_frame, text="CAN ID (hex):").grid(row=1, column=0, sticky=tk.W, pady=5)
         self.send_id_var = tk.StringVar(value="123")
-        ttk.Entry(send_frame, textvariable=self.send_id_var, width=15).grid(row=0, column=1, sticky=tk.W)
+        ttk.Entry(send_frame, textvariable=self.send_id_var, width=15).grid(row=1, column=1, sticky=tk.W)
         
-        ttk.Label(send_frame, text="数据 (hex):").grid(row=1, column=0, sticky=tk.W, pady=5)
+        ttk.Label(send_frame, text="数据 (hex):").grid(row=2, column=0, sticky=tk.W, pady=5)
         self.send_data_var = tk.StringVar(value="AA BB CC DD")
-        ttk.Entry(send_frame, textvariable=self.send_data_var, width=40).grid(row=1, column=1, sticky=tk.W)
+        ttk.Entry(send_frame, textvariable=self.send_data_var, width=40).grid(row=2, column=1, sticky=tk.W)
         
-        ttk.Button(send_frame, text="发送", command=self.send_frame).grid(row=0, column=2, rowspan=2, padx=10)
+        ttk.Button(send_frame, text="发送", command=self.send_frame).grid(row=1, column=2, rowspan=2, padx=10)
         
-        ttk.Label(send_frame, text="周期发送 (ms):").grid(row=2, column=0, sticky=tk.W, pady=5)
+        ttk.Label(send_frame, text="周期发送 (ms):").grid(row=3, column=0, sticky=tk.W, pady=5)
         self.period_var = tk.StringVar(value="100")
-        ttk.Entry(send_frame, textvariable=self.period_var, width=10).grid(row=2, column=1, sticky=tk.W)
+        ttk.Entry(send_frame, textvariable=self.period_var, width=10).grid(row=3, column=1, sticky=tk.W)
         
         self.periodic_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(send_frame, text="启用周期发送", variable=self.periodic_var,
-                        command=self.toggle_periodic).grid(row=2, column=2, sticky=tk.W)
+                        command=self.toggle_periodic).grid(row=3, column=2, sticky=tk.W)
         
         # 接收区域
         recv_frame = ttk.LabelFrame(self.root, text="接收 CAN 帧", padding="10")
         recv_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
         
-        # 工具栏
         recv_toolbar = ttk.Frame(recv_frame)
         recv_toolbar.pack(fill=tk.X)
         
@@ -330,7 +286,6 @@ class CANToolGUI:
         self.rx_count_label = ttk.Label(recv_toolbar, text="接收: 0 帧")
         self.rx_count_label.pack(side=tk.RIGHT, padx=10)
         
-        # 接收文本框
         self.recv_text = scrolledtext.ScrolledText(recv_frame, height=20, font=("Consolas", 9))
         self.recv_text.pack(fill=tk.BOTH, expand=True, pady=5)
         
@@ -351,32 +306,38 @@ class CANToolGUI:
     def disconnect(self):
         """断开连接"""
         self.stop_periodic()
+        if self.channels_started:
+            self.stop_all_channels()
         self.can.close()
         self.status_label.config(text="未连接", foreground="red")
     
-    def start_channel(self):
-        """启动 CAN 通道"""
+    def start_all_channels(self):
+        """启动所有 CAN 通道"""
         if not self.can.is_open:
             messagebox.showwarning("警告", "请先连接设备")
             return
         
         try:
-            channel = self.channel_var.get()
-            self.can.set_bitrate(channel, BITRATE_1M)
-            self.can.start_channel(channel)
-            messagebox.showinfo("成功", f"通道 {channel} 已启动")
+            for ch in [0, 1]:
+                self.can.set_bitrate(ch, BITRATE_1M)
+                self.can.start_channel(ch)
+            
+            self.channels_started = True
+            messagebox.showinfo("成功", "CAN0 和 CAN1 已启动 (1Mbps)")
         except Exception as e:
             messagebox.showerror("错误", f"启动失败: {e}")
-    
-    def stop_channel(self):
-        """停止 CAN 通道"""
+
+    def stop_all_channels(self):
+        """停止所有 CAN 通道"""
         if not self.can.is_open:
             return
         
         try:
-            channel = self.channel_var.get()
-            self.can.stop_channel(channel)
-            messagebox.showinfo("成功", f"通道 {channel} 已停止")
+            for ch in [0, 1]:
+                self.can.stop_channel(ch)
+            
+            self.channels_started = False
+            messagebox.showinfo("成功", "CAN0 和 CAN1 已停止")
         except Exception as e:
             messagebox.showerror("错误", f"停止失败: {e}")
     
@@ -386,15 +347,18 @@ class CANToolGUI:
             messagebox.showwarning("警告", "请先连接设备")
             return
         
+        if not self.channels_started:
+            messagebox.showwarning("警告", "请先启动通道")
+            return
+        
         try:
-            channel = self.channel_var.get()
+            channel = self.send_channel_var.get()
             can_id = int(self.send_id_var.get(), 16)
             data_str = self.send_data_var.get().replace(" ", "")
             data = bytes.fromhex(data_str)
             
             self.can.send_frame(channel, can_id, data)
             
-            # 显示在接收框
             timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
             msg = f"[{timestamp}] TX CH{channel} ID:0x{can_id:03X} Data:{data.hex(' ').upper()}\n"
             self.recv_text.insert(tk.END, msg, "tx")
@@ -444,12 +408,9 @@ class CANToolGUI:
         while not self.rx_queue.empty():
             frame = self.rx_queue.get()
             
-            # 过滤空帧
             if frame.can_id == 0 and frame.can_dlc == 0:
-                print(f"[SKIP] Empty frame on CH{frame.channel}")
                 continue
             
-            # 过滤 ID
             filter_id = self.filter_var.get().strip()
             if filter_id:
                 try:
@@ -462,7 +423,6 @@ class CANToolGUI:
             self.rx_count_label.config(text=f"接收: {self.rx_count} 帧")
             
             timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-            # ✅ 修复: 只显示前 dlc 字节
             data_hex = frame.data[:frame.can_dlc].hex(' ').upper()
             msg = f"[{timestamp}] RX CH{frame.channel} ID:0x{frame.can_id:03X} DLC:{frame.can_dlc} Data:{data_hex}\n"
             
@@ -480,37 +440,6 @@ class CANToolGUI:
         self.recv_text.delete('1.0', tk.END)
         self.rx_count = 0
         self.rx_count_label.config(text="接收: 0 帧")
-
-    def start_all_channels(self):
-        """启动所有 CAN 通道"""
-        if not self.can.is_open:
-            messagebox.showwarning("警告", "请先连接设备")
-            return
-        
-        try:
-            # 启动 CAN0 和 CAN1
-            for ch in [0, 1]:
-                self.can.set_bitrate(ch, BITRATE_1M)
-                self.can.start_channel(ch)
-                print(f"Channel {ch} started")
-            
-            messagebox.showinfo("成功", "CAN0 和 CAN1 已启动")
-        except Exception as e:
-            messagebox.showerror("错误", f"启动失败: {e}")
-
-    def stop_all_channels(self):
-        """停止所有 CAN 通道"""
-        if not self.can.is_open:
-            return
-        
-        try:
-            for ch in [0, 1]:
-                self.can.stop_channel(ch)
-                print(f"Channel {ch} stopped")
-            
-            messagebox.showinfo("成功", "CAN0 和 CAN1 已停止")
-        except Exception as e:
-            messagebox.showerror("错误", f"停止失败: {e}")
             
 def main():
     root = tk.Tk()
