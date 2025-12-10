@@ -3,6 +3,6 @@ board:
   full_name: roboparty_canfd
   vendor: others
   socs:
-    - name: stm32g0b1xx
+    - name: stm32g431xx
       variants:
         - name: 'roboparty_canfd'

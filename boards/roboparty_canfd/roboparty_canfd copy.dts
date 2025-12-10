@@ -1,0 +1,167 @@
+/dts-v1/;
+/*
+ * Copyright (c) 2024 Sean Nyekjaer <sean@geanix.com>
+ *
+ *  SPDX-License-Identifier: Apache-2.0
+ */
+
+#include <st/g0/stm32g0b1Xb.dtsi>
+#include <st/g0/stm32g0b1r(b-c-e)tx-pinctrl.dtsi>
+
+/ {
+    model = "roboparty_canfd";
+    compatible = "candlelightfd";
+
+    chosen {
+        zephyr,sram = &sram0;
+        zephyr,flash = &flash0;
+        zephyr,code-partition = &slot0_partition;
+        zephyr,canbus = &fdcan1;
+        zephyr,console = &usart1;  /* 添加控制台 */
+        zephyr,shell-uart = &usart1;  /* 添加 shell */
+    };
+
+    aliases {
+        led0 = &led_stat;           // 主状态指示灯
+        mcuboot-led0 = &led_word;   // DFU 指示灯
+    };
+
+    leds {
+        compatible = "gpio-leds";
+
+        led_stat: led_stat {
+            gpios = <&gpioa 0 GPIO_ACTIVE_LOW>;
+            label = "LED STAT";
+        };
+
+        led_word: led_word {
+            gpios = <&gpioa 1 GPIO_ACTIVE_LOW>;
+            label = "LED WORD";
+        };
+    };
+
+    transceiver0: can-phy0 {
+        compatible = "ti,iso1050", "can-transceiver-gpio";
+        enable-gpios = <&gpioc 13 GPIO_ACTIVE_LOW>;  /* 使用未使用的引脚 */
+        max-bitrate = <5000000>;
+        #phy-cells = <0>;
+    };
+
+    transceiver1: can-phy1 {
+        compatible = "ti,iso1050", "can-transceiver-gpio";
+        enable-gpios = <&gpioc 14 GPIO_ACTIVE_LOW>;  /* 使用未使用的引脚 */
+        max-bitrate = <5000000>;
+        #phy-cells = <0>;
+    };
+
+    cannectivity: cannectivity {
+        compatible = "cannectivity";
+        timestamp-counter = <&counter2>;
+
+        channel0 {
+            compatible = "cannectivity-channel";
+            can-controller = <&fdcan1>;
+            // state-led = <&led_stat>;
+            // activity-leds = <&led_stat>;
+        };
+
+        channel1 {
+            compatible = "cannectivity-channel";
+            can-controller = <&fdcan2>;
+            // state-led = <&led_word>;
+            // activity-leds = <&led_word>;
+        };
+    };
+};
+
+&clk_hsi {
+    status = "okay";
+};
+
+&clk_hsi48 {
+    status = "okay";
+    // crs-usb-sof;
+};
+
+&pll {
+    div-m = <1>;
+    mul-n = <8>;
+    div-p = <2>;
+    div-q = <2>;
+    div-r = <2>;
+    clocks = <&clk_hsi>;
+    status = "okay";
+};
+
+&rcc {
+    clocks = <&pll>;
+    clock-frequency = <DT_FREQ_M(64)>;
+    ahb-prescaler = <1>;
+    apb1-prescaler = <1>;
+};
+
+&usart1 {
+    pinctrl-0 = <&usart1_tx_pa9 &usart1_rx_pa10>;
+    pinctrl-names = "default";
+    current-speed = <115200>;
+    status = "okay";
+};
+
+zephyr_udc0: &usb {
+    pinctrl-0 = <&usb_dm_pa11 &usb_dp_pa12>;
+    pinctrl-names = "default";
+    status = "okay";
+
+    /* gs_usb 设备节点 */
+    gs_usb0: gs_usb0 {
+        compatible = "gs_usb";
+    };
+};
+
+&fdcan1 {
+    clocks = <&rcc STM32_CLOCK(APB1, 12)>,
+         <&rcc STM32_SRC_PLL_Q FDCAN_SEL(1)>;
+    pinctrl-0 = <&fdcan1_rx_pd0 &fdcan1_tx_pd1>;
+    pinctrl-names = "default";
+    phys = <&transceiver0>; 
+    status = "okay";
+};
+
+&fdcan2 {
+    clocks = <&rcc STM32_CLOCK(APB1, 12)>,
+         <&rcc STM32_SRC_PLL_Q FDCAN_SEL(1)>;
+    pinctrl-0 = <&fdcan2_rx_pb0 &fdcan2_tx_pb1>;
+    pinctrl-names = "default";
+    phys = <&transceiver1>;
+    status = "okay";
+};
+
+/* 1MHz 时间戳计数器 (64MHz / 64 = 1MHz) */
+&timers2 {
+    status = "okay";
+    st,prescaler = <63>;
+
+    counter2: counter {
+        compatible = "st,stm32-counter";
+        status = "okay";
+    };
+};
+
+&flash0 {
+    partitions {
+        compatible = "fixed-partitions";
+        #address-cells = <1>;
+        #size-cells = <1>;
+
+        boot_partition: partition@0 {
+            label = "mcuboot";
+            reg = <0x00000000 DT_SIZE_K(48)>;
+            read-only;
+        };
+
+        slot0_partition: partition@c000 {
+            label = "image-0";
+            reg = <0x0000c000 DT_SIZE_K(80)>;
+        };
+    };
+};
