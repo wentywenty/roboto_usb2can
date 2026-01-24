@@ -2,3 +2,5 @@ build/
 .cache/
 dist/
 RobopartyCAN.spec
+.vscode/
+flasher/
