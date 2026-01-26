@@ -12,6 +12,10 @@
 
 LOG_MODULE_REGISTER(status_led, LOG_LEVEL_INF);
 
+/* 虚假 STOPPED 事件过滤（防止 Linux 5/6.1 内核 bug） */
+#define MIN_STOP_INTERVAL_MS 1000 /* 1秒内的 STOP 事件视为异常 */
+static k_timepoint_t last_stopped_time;
+
 /* LED 活动计时器 */
 #define LED_TICK_MS        50 /* 定时器每50ms触发 */
 #define LED_TICKS_ACTIVITY 2  /* 活动LED亮2个tick (100ms) */
@@ -137,6 +141,7 @@ int status_led_init(void)
 	k_timer_init(&activity_tick_timer, activity_tick_handler, NULL);
 	k_timer_start(&activity_tick_timer, K_MSEC(LED_TICK_MS), K_MSEC(LED_TICK_MS));
 	last_activity_time = sys_timepoint_calc(K_NO_WAIT);
+	last_stopped_time = sys_timepoint_calc(K_NO_WAIT); /* 初始化 STOPPED 过滤器 */
 
 	/* 启动初始化闪烁 */
 	status_led_set(LED_STATUS_INIT);
@@ -201,10 +206,19 @@ int status_led_event(const struct device *dev, uint16_t ch, enum gs_usb_event ev
 
 	case GS_USB_EVENT_CHANNEL_STARTED:
 		LOG_DBG("Channel %u started", ch);
+		last_stopped_time = sys_timepoint_calc(K_NO_WAIT); /* 重置 STOPPED 过滤器 */
 		status_led_set(LED_STATUS_USB_READY);
 		break;
 
 	case GS_USB_EVENT_CHANNEL_STOPPED:
+		/* 过滤 Linux 5/6.1 的虚假 STOP 事件 */
+		if (!sys_timepoint_expired(last_stopped_time)) {
+			LOG_WRN("Channel %u: Ignoring spurious STOPPED event (possible Linux "
+				"kernel bug)",
+				ch);
+			return 0; /* 忽略虚假事件 */
+		}
+		last_stopped_time = sys_timepoint_calc(K_MSEC(MIN_STOP_INTERVAL_MS));
 		LOG_DBG("Channel %u stopped", ch);
 		status_led_set(LED_STATUS_IDLE);
 		break;

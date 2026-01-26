@@ -5,10 +5,28 @@
 #else
 #include <zephyr/usb/usb_device.h>
 #endif
+#include <zephyr/drivers/can.h>
 #include <cannectivity/usb/class/gs_usb.h>
 #include "status_led.h"
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
+
+/* CAN 错误帧监控配置 */
+#define CAN_ERR_FRAME_THRESHOLD 50   /* 每秒最多允许 50 个错误帧 */
+#define CAN_ERR_WINDOW_MS       1000 /* 统计窗口 1 秒 */
+#define CAN_ERR_PASSIVE_LIMIT   10   /* ERROR_PASSIVE 累计 10 次后强制 Bus-Off */
+
+/* CAN 错误监控器（每通道） */
+struct can_error_monitor {
+	uint32_t err_frame_count;   /* 当前窗口内错误帧数量 */
+	uint32_t err_passive_count; /* ERROR_PASSIVE 累计次数 */
+	int64_t window_start_ms;    /* 统计窗口起始时间 */
+	bool throttled;             /* 是否已触发节流 */
+	bool forced_busoff;         /* 是否已强制 Bus-Off */
+};
+
+static struct can_error_monitor err_monitors[1] = {0}; /* 单通道，可扩展 */
+static const struct device *can_devices[] = {DEVICE_DT_GET(DT_NODELABEL(fdcan1))};
 
 // static const struct device *uart_dev = DEVICE_DT_GET(DT_NODELABEL(usart1));
 
@@ -21,22 +39,89 @@ USBD_DESC_MANUFACTURER_DEFINE(mfr, "flora");
 USBD_DESC_PRODUCT_DEFINE(product, "roboparty CAN FD");
 USBD_DESC_SERIAL_NUMBER_DEFINE(sn);
 USBD_DESC_CONFIG_DEFINE(fs_config_desc, "Full-Speed Configuration");
-USBD_DESC_CONFIG_DEFINE(hs_config_desc, "High-Speed Configuration");
 
 USBD_CONFIGURATION_DEFINE(fs_config, 0, 250, &fs_config_desc);
-USBD_CONFIGURATION_DEFINE(hs_config, 0, 250, &hs_config_desc);
 #endif
 
-// static int uart_init(void)
-// {
-//     if (!device_is_ready(uart_dev)) {
-//         LOG_ERR("UART device not ready");
-//         return -1;
-//     }
+/* CAN 状态变化回调 - 错误监控与保护 */
+static void can_state_change_callback(const struct device *dev, enum can_state state,
+				      struct can_bus_err_cnt err_cnt, void *user_data)
+{
+	int ch = 0; /* 当前只支持单通道，多通道需要通过 user_data 或 dev 匹配 */
+	struct can_error_monitor *mon = &err_monitors[ch];
+	int64_t now = k_uptime_get();
 
-//     printk("UART1 echo enabled on PA9(TX)/PA10(RX) @ 115200\n");
-//     return 0;
-// }
+	/* 重置统计窗口 */
+	if ((now - mon->window_start_ms) > CAN_ERR_WINDOW_MS) {
+		mon->err_frame_count = 0;
+		mon->window_start_ms = now;
+		mon->throttled = false;
+	}
+
+	/* 错误帧计数 */
+	if (state != CAN_STATE_ERROR_ACTIVE) {
+		mon->err_frame_count++;
+	}
+
+	/* 错误帧洪水检测 */
+	if (mon->err_frame_count > CAN_ERR_FRAME_THRESHOLD) {
+		if (!mon->throttled) {
+			LOG_ERR("CH%d: Error frame flood detected (%u/s), throttling", ch,
+				mon->err_frame_count);
+			mon->throttled = true;
+			status_led_set(LED_STATUS_ERROR);
+		}
+
+		/* 主动进入 Bus-Off 保护总线 */
+		if (!mon->forced_busoff) {
+			LOG_ERR("CH%d: Forcing Bus-Off to prevent bus freeze", ch);
+			can_stop(dev);
+			mon->forced_busoff = true;
+			return;
+		}
+	}
+
+	/* 处理不同错误状态 */
+	switch (state) {
+	case CAN_STATE_ERROR_ACTIVE:
+		LOG_DBG("CH%d: CAN ERROR_ACTIVE (TEC=%u, REC=%u)", ch, err_cnt.tx_err_cnt,
+			err_cnt.rx_err_cnt);
+		mon->err_passive_count = 0; /* 恢复后重置计数 */
+		mon->forced_busoff = false;
+		break;
+
+	case CAN_STATE_ERROR_WARNING:
+		LOG_WRN("CH%d: CAN ERROR_WARNING (TEC=%u, REC=%u)", ch, err_cnt.tx_err_cnt,
+			err_cnt.rx_err_cnt);
+		break;
+
+	case CAN_STATE_ERROR_PASSIVE:
+		mon->err_passive_count++;
+		LOG_WRN("CH%d: CAN ERROR_PASSIVE #%u (TEC=%u, REC=%u)", ch, mon->err_passive_count,
+			err_cnt.tx_err_cnt, err_cnt.rx_err_cnt);
+
+		/* ERROR_PASSIVE 持续出现 -> 主动 Bus-Off */
+		if (mon->err_passive_count > CAN_ERR_PASSIVE_LIMIT) {
+			LOG_ERR("CH%d: Persistent ERROR_PASSIVE (%u times), forcing Bus-Off", ch,
+				mon->err_passive_count);
+			can_stop(dev);
+			mon->forced_busoff = true;
+			status_led_set(LED_STATUS_ERROR);
+		}
+		break;
+
+	case CAN_STATE_BUS_OFF:
+		LOG_ERR("CH%d: CAN BUS_OFF (TEC=%u, REC=%u)", ch, err_cnt.tx_err_cnt,
+			err_cnt.rx_err_cnt);
+		mon->forced_busoff = true;
+		status_led_set(LED_STATUS_ERROR);
+		break;
+
+	case CAN_STATE_STOPPED:
+		LOG_INF("CH%d: CAN STOPPED", ch);
+		break;
+	}
+}
 
 int main(void)
 {
@@ -55,11 +140,21 @@ int main(void)
 
 	printk("*** roboparty CAN FD adapter ***\n");
 
-	// /* 初始化 UART echo */
-	// err = uart_init();
-	// if (err != 0) {
-	//     LOG_ERR("Failed to initialize UART");
-	// }
+	/* 初始化 CAN 错误监控 */
+	for (int i = 0; i < ARRAY_SIZE(can_devices); i++) {
+		if (!device_is_ready(can_devices[i])) {
+			LOG_ERR("CAN device %d not ready", i);
+			continue;
+		}
+
+		/* 注册 CAN 状态变化回调 */
+		can_set_state_change_callback(can_devices[i], can_state_change_callback,
+					      (void *)(intptr_t)i);
+		LOG_INF("CAN error monitoring enabled for channel %d", i);
+
+		/* 初始化错误监控器 */
+		err_monitors[i].window_start_ms = k_uptime_get();
+	}
 
 	if (!device_is_ready(gs_usb)) {
 		LOG_ERR("gs_usb not ready");
