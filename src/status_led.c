@@ -1,6 +1,5 @@
 /*
- * Status LED management for roboparty CAN FD
- * LED STAT (PC11) - Unified status indication
+ * Status LED management for roboto_usb2can
  */
 
 #include "status_led.h"

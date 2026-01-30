@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-roboparty CAN FD Host Tool
+roboto_usb2can Host Tool
 Supports dual-channel CAN transmission and reception
 """
 
