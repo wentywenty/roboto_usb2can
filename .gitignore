@@ -4,3 +4,4 @@ dist/
 RobopartyCAN.spec
 .vscode/
 flasher/
+test/

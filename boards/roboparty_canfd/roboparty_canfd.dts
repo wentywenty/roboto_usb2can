@@ -1,6 +1,6 @@
 /dts-v1/;
 /*
- * Copyright (c) 2024 Sean Nyekjaer <sean@geanix.com>
+ * Copyright (c) 2025 roboparty <2321901849@qq.com>
  *
  *  SPDX-License-Identifier: Apache-2.0
  */
@@ -39,14 +39,14 @@
 
     transceiver0: can-phy0 {
         compatible = "ti,iso1050", "can-transceiver-gpio";
-        enable-gpios = <&gpioc 13 GPIO_ACTIVE_LOW>;  /* 使用未使用的引脚 */
+        enable-gpios = <&gpioc 13 GPIO_ACTIVE_LOW>; 
         max-bitrate = <5000000>;
         #phy-cells = <0>;
     };
 
     transceiver1: can-phy1 {
         compatible = "ti,iso1050", "can-transceiver-gpio";
-        enable-gpios = <&gpioc 14 GPIO_ACTIVE_LOW>;  /* 使用未使用的引脚 */
+        enable-gpios = <&gpioc 14 GPIO_ACTIVE_LOW>; 
         max-bitrate = <5000000>;
         #phy-cells = <0>;
     };
@@ -113,7 +113,7 @@ zephyr_udc0: &usb {
 	status = "okay";
 };
 
-/* 1MHz 时间戳计数器 (64MHz / 64 = 1MHz) */
+/* 1MHz Timestamp Counter (64MHz / 64 = 1MHz) */
 stm32_lp_tick_source: &lptim1 {
 	clocks = <&rcc STM32_CLOCK(APB1, 31)>,
 		 <&rcc STM32_SRC_LSI LPTIM1_SEL(3)>;

@@ -1,94 +1,94 @@
 /*
  * Status LED management for roboparty CAN FD
- * LED STAT (PC11) - 统一状态指示
+ * LED STAT (PC11) - Unified status indication
  */
 
-#include <zephyr/kernel.h>
+#include "status_led.h"
+#include <cannectivity/usb/class/gs_usb.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/gpio.h>
+#include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
-#include <cannectivity/usb/class/gs_usb.h>
-#include "status_led.h"
 
 LOG_MODULE_REGISTER(status_led, LOG_LEVEL_INF);
 
-/* 虚假 STOPPED 事件过滤（防止 Linux 5/6.1 内核 bug） */
-#define MIN_STOP_INTERVAL_MS 1000 /* 1秒内的 STOP 事件视为异常 */
+/* Spurious STOPPED event filtering (prevent Linux 5/6.1 kernel bug) */
+#define MIN_STOP_INTERVAL_MS 1000 /* STOP events within 1 second are considered abnormal */
 static k_timepoint_t last_stopped_time;
 
-/* LED 活动计时器 */
-#define LED_TICK_MS        50 /* 定时器每50ms触发 */
-#define LED_TICKS_ACTIVITY 2  /* 活动LED亮2个tick (100ms) */
+/* LED activity timer */
+#define LED_TICK_MS        50 /* Timer triggers every 50ms */
+#define LED_TICKS_ACTIVITY 2  /* Activity LED on for 2 ticks (100ms) */
 
 static struct k_timer activity_tick_timer;
 static k_timepoint_t last_activity_time;
 static int activity_ticks = 0;
 
-/* LED 闪烁模式 */
+/* LED blink patterns */
 struct led_pattern {
-	uint16_t on_ms;  // 亮持续时间
-	uint16_t off_ms; // 灭持续时间
-	int8_t repeat;   // 重复次数 (-1=无限循环)
+	uint16_t on_ms;  // Duration on
+	uint16_t off_ms; // Duration off
+	int8_t repeat;   // Repeat count (-1=infinite loop)
 };
 
-/* 各状态对应的闪烁模式 */
+/* Blink patterns for each status */
 static const struct led_pattern led_patterns[] = {
-	[LED_STATUS_INIT] = {100, 100, 3},       // 快闪 3 次（初始化）
-	[LED_STATUS_IDLE] = {100, 1900, -1},     // 慢闪（2秒周期）
-	[LED_STATUS_USB_READY] = {500, 500, -1}, // 中速闪（1秒周期）
-	[LED_STATUS_CAN_ACTIVE] = {50, 50, 1},   // 短闪 1 次（CAN 活动）
-	[LED_STATUS_ERROR] = {100, 100, -1},     // 快速闪烁（错误）
+	[LED_STATUS_INIT] = {100, 100, 3},       // Fast blink 3 times (initialization)
+	[LED_STATUS_IDLE] = {100, 1900, -1},     // Slow blink (2s period)
+	[LED_STATUS_USB_READY] = {500, 500, -1}, // Medium blink (1s period)
+	[LED_STATUS_CAN_ACTIVE] = {50, 50, 1},   // Short blink 1 time (CAN activity)
+	[LED_STATUS_ERROR] = {100, 100, -1},     // Fast blink (error)
 };
 
-/* LED 硬件定义 */
+/* LED hardware definitions */
 static const struct gpio_dt_spec status_led = GPIO_DT_SPEC_GET(DT_ALIAS(led0), gpios);
 static const struct gpio_dt_spec activity_led = GPIO_DT_SPEC_GET(DT_ALIAS(led1), gpios);
 
-/* 工作队列 */
+/* Work queue */
 static struct k_work_delayable led_work;
-static struct k_work_delayable activity_work; // Activity LED 工作队列
+static struct k_work_delayable activity_work; // Activity LED work queue
 static enum led_status current_status = LED_STATUS_INIT;
 static int current_repeat_count = 0;
 static bool led_state = false;
 
-/* LED 闪烁任务 */
+/* LED blink work */
 static void led_blink_work(struct k_work *work)
 {
 	const struct led_pattern *pattern = &led_patterns[current_status];
 	uint32_t next_delay;
 
-	/* 切换 LED 状态 */
+	/* Toggle LED state */
 	led_state = !led_state;
 	gpio_pin_set_dt(&status_led, led_state);
 
-	/* 计算下次触发时间 */
+	/* Calculate next trigger time */
 	if (led_state) {
 		next_delay = pattern->on_ms;
 	} else {
 		next_delay = pattern->off_ms;
 
-		/* 检查重复次数 */
+		/* Check repeat count */
 		if (pattern->repeat > 0) {
 			current_repeat_count++;
 			if (current_repeat_count >= pattern->repeat) {
-				/* 完成指定次数，停止 */
+				/* Completed specified count, stop */
 				gpio_pin_set_dt(&status_led, 0);
 				return;
 			}
 		}
 	}
 
-	/* 重新调度任务 */
+	/* Reschedule work */
 	k_work_reschedule(&led_work, K_MSEC(next_delay));
 }
 
-/* Activity LED 熄灭任务 */
+/* Activity LED turn off work */
 static void activity_led_off_work(struct k_work *work)
 {
 	gpio_pin_set_dt(&activity_led, 0);
 }
 
-/* 活动 LED 定时器回调（每50ms触发） */
+/* Activity LED timer callback (triggers every 50ms) */
 static void activity_tick_handler(struct k_timer *timer)
 {
 	ARG_UNUSED(timer);
@@ -96,16 +96,16 @@ static void activity_tick_handler(struct k_timer *timer)
 	if (activity_ticks > 0) {
 		activity_ticks--;
 		if (activity_ticks == (LED_TICKS_ACTIVITY / 2)) {
-			/* 中tick后点亮 */
+			/* Turn on after middle tick */
 			gpio_pin_set_dt(&activity_led, 1);
 		} else if (activity_ticks == 0) {
-			/* 结束时熄灭 */
+			/* Turn off at end */
 			gpio_pin_set_dt(&activity_led, 0);
 		}
 	}
 }
 
-/* 初始化状态 LED */
+/* Initialize status LED */
 int status_led_init(void)
 {
 	int ret;
@@ -121,7 +121,7 @@ int status_led_init(void)
 		return ret;
 	}
 
-	/* 初始化 Activity LED (绿灯) */
+	/* Initialize Activity LED (Green) */
 	if (!gpio_is_ready_dt(&activity_led)) {
 		LOG_WRN("Activity LED GPIO not ready");
 	} else {
@@ -134,23 +134,23 @@ int status_led_init(void)
 		}
 	}
 
-	/* 初始化工作队列 */
+	/* Initialize work queue */
 	k_work_init_delayable(&led_work, led_blink_work);
 
-	/* 初始化活动LED定时器 */
+	/* Initialize activity LED timer */
 	k_timer_init(&activity_tick_timer, activity_tick_handler, NULL);
 	k_timer_start(&activity_tick_timer, K_MSEC(LED_TICK_MS), K_MSEC(LED_TICK_MS));
 	last_activity_time = sys_timepoint_calc(K_NO_WAIT);
-	last_stopped_time = sys_timepoint_calc(K_NO_WAIT); /* 初始化 STOPPED 过滤器 */
+	last_stopped_time = sys_timepoint_calc(K_NO_WAIT); /* Initialize STOPPED filter */
 
-	/* 启动初始化闪烁 */
+	/* Start initialization blink */
 	status_led_set(LED_STATUS_INIT);
 
 	LOG_INF("Status LED initialized");
 	return 0;
 }
 
-/* 设置 LED 状态 */
+/* Set LED status */
 void status_led_set(enum led_status status)
 {
 	if (status >= ARRAY_SIZE(led_patterns)) {
@@ -158,14 +158,14 @@ void status_led_set(enum led_status status)
 		return;
 	}
 
-	/* 取消当前闪烁 */
+	/* Cancel current blink */
 	k_work_cancel_delayable(&led_work);
 
 	current_status = status;
 	current_repeat_count = 0;
 	led_state = false;
 
-	/* 启动新的闪烁模式 */
+	/* Start new blink pattern */
 	const struct led_pattern *pattern = &led_patterns[status];
 	gpio_pin_set_dt(&status_led, 1);
 	k_work_reschedule(&led_work, K_MSEC(pattern->on_ms));
@@ -173,18 +173,18 @@ void status_led_set(enum led_status status)
 	LOG_DBG("LED status changed to %d", status);
 }
 
-/* CAN 活动指示（独立控制绿灯，不影响蓝灯） */
+/* CAN activity indication (independently controls green LED, does not affect blue LED) */
 void status_led_can_activity(void)
 {
 	if (!gpio_is_ready_dt(&activity_led)) {
 		return;
 	}
 
-	/* 使用定时器计数器方式 */
+	/* Use timer counter method */
 	activity_ticks = LED_TICKS_ACTIVITY;
 }
 
-/* gs_usb 事件回调函数 */
+/* gs_usb event callback function */
 int status_led_event(const struct device *dev, uint16_t ch, enum gs_usb_event event,
 		     void *user_data)
 {
@@ -196,9 +196,9 @@ int status_led_event(const struct device *dev, uint16_t ch, enum gs_usb_event ev
 	case GS_USB_EVENT_CHANNEL_ACTIVITY_RX:
 		__fallthrough;
 	case GS_USB_EVENT_CHANNEL_ACTIVITY_TX:
-		/* 低通滤波：防止LED闪烁过快 */
+		/* Low-pass filter: prevent LED from blinking too fast */
 		if (!sys_timepoint_expired(last_activity_time)) {
-			return 0; /* 忽略过频繁的事件 */
+			return 0; /* Ignore frequent events */
 		}
 		last_activity_time = sys_timepoint_calc(K_MSEC(LED_TICK_MS * LED_TICKS_ACTIVITY));
 		status_led_can_activity();
@@ -206,17 +206,17 @@ int status_led_event(const struct device *dev, uint16_t ch, enum gs_usb_event ev
 
 	case GS_USB_EVENT_CHANNEL_STARTED:
 		LOG_DBG("Channel %u started", ch);
-		last_stopped_time = sys_timepoint_calc(K_NO_WAIT); /* 重置 STOPPED 过滤器 */
+		last_stopped_time = sys_timepoint_calc(K_NO_WAIT); /* Reset STOPPED filter */
 		status_led_set(LED_STATUS_USB_READY);
 		break;
 
 	case GS_USB_EVENT_CHANNEL_STOPPED:
-		/* 过滤 Linux 5/6.1 的虚假 STOP 事件 */
+		/* Filter spurious STOP events from Linux 5/6.1 */
 		if (!sys_timepoint_expired(last_stopped_time)) {
 			LOG_WRN("Channel %u: Ignoring spurious STOPPED event (possible Linux "
 				"kernel bug)",
 				ch);
-			return 0; /* 忽略虚假事件 */
+			return 0; /* Ignore spurious events */
 		}
 		last_stopped_time = sys_timepoint_calc(K_MSEC(MIN_STOP_INTERVAL_MS));
 		LOG_DBG("Channel %u stopped", ch);
@@ -224,14 +224,14 @@ int status_led_event(const struct device *dev, uint16_t ch, enum gs_usb_event ev
 		break;
 
 	default:
-		/* 忽略其他事件 */
+		/* Ignore other events */
 		break;
 	}
 
 	return 0;
 }
 
-/* 设置 LED 常亮/常灭 */
+/* Set LED on or off constantly */
 void status_led_set_static(bool on)
 {
 	k_work_cancel_delayable(&led_work);
