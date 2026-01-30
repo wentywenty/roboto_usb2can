@@ -9,7 +9,7 @@
 #include <st/g4/stm32g431c(6-8-b)tx-pinctrl.dtsi>
 
 / {
-    model = "roboparty_canfd";
+    model = "roboto_usb2can";
     compatible = "candlelightfd";
 
     chosen {

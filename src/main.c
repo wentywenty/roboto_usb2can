@@ -150,8 +150,8 @@ static const struct device *can_devices[] = {DEVICE_DT_GET(DT_NODELABEL(fdcan1))
 USBD_DEVICE_DEFINE(usbd, DEVICE_DT_GET(DT_NODELABEL(zephyr_udc0)), 0x1D50, 0x606F);
 
 USBD_DESC_LANG_DEFINE(lang);
-USBD_DESC_MANUFACTURER_DEFINE(mfr, "flora");
-USBD_DESC_PRODUCT_DEFINE(product, "roboparty CAN FD");
+USBD_DESC_MANUFACTURER_DEFINE(mfr, "wentywenty");
+USBD_DESC_PRODUCT_DEFINE(product, "roboto_usb2can");
 USBD_DESC_SERIAL_NUMBER_DEFINE(sn);
 USBD_DESC_CONFIG_DEFINE(fs_config_desc, "Full-Speed Configuration");
 USBD_CONFIGURATION_DEFINE(fs_config, 0, 250, &fs_config_desc);
@@ -253,7 +253,7 @@ int main(void)
 		LOG_ERR("Failed to initialize status LED (err %d)", err);
 	}
 
-	printk("*** roboparty CAN FD adapter v%s ***\n", APP_VERSION_STR);
+	printk("*** roboto_usb2can adapter v%s ***\n", APP_VERSION_STR);
 
 	/* Initialize CAN error monitoring */
 	for (int i = 0; i < ARRAY_SIZE(can_devices); i++) {
@@ -373,7 +373,7 @@ int main(void)
 	}
 #endif
 
-	LOG_INF("roboparty CAN FD initialized with %u channels", ARRAY_SIZE(channels));
+	LOG_INF("roboto_usb2can initialized with %u channels", ARRAY_SIZE(channels));
 
 	/* Set LED to USB ready state */
 	status_led_set(LED_STATUS_USB_READY);

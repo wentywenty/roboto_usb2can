@@ -1,8 +1,8 @@
-# roboparty CAN 2.0 适配器使用手册
+# roboto_usb2can 适配器使用手册
 
 ## 📖 简介
 
-roboparty CAN 2.0 是一款基于 STM32G431 的单通道 CAN2.0 适配器，兼容开源的 `gs_usb` 协议（candleLight）。它支持 Windows 免驱使用（WinUSB）及 Linux 原生 SocketCAN 接口，适合开发调试及总线分析。
+roboto_usb2can 是一款基于 STM32G431 的单通道 CAN2.0 固件，兼容开源的 `gs_usb` 协议（candleLight）。它支持 Windows 免驱使用（WinUSB）及 Linux 原生 SocketCAN 接口，适合开发调试及总线分析。
 
 ---
 
@@ -50,14 +50,14 @@ roboparty CAN 2.0 是一款基于 STM32G431 的单通道 CAN2.0 适配器，兼�
    将本仓库克隆到 `zephyr/samples` 目录：
 
    ```bash
-   git clone https://github.com/wentywenty/roboparty_canfd samples/roboparty_canfd
+   git clone https://github.com/wentywenty/roboto_usb2can samples/roboto_usb2can
    ```
 
 ### 2. 编译
 
 ```bash
-cd roboparty_canfd
-west build -b roboparty_canfd
+cd roboto_usb2can
+west build -b roboto_usb2can
 ```
 
 ### 3. 烧录
@@ -131,7 +131,7 @@ pip install pyusb
 
 # 运行 (确保 libusb-1.0.dll 在目录下或系统路径中)
 cd scripts
-python roboparty_can_tool.py
+python roboto_usb2can_tool.py
 ```
 
 ### 2. 功能说明
@@ -159,10 +159,10 @@ python roboparty_can_tool.py
 
    ```bash
    cd scripts
-   pyinstaller --noconfirm --onefile --windowed --clean --icon="icon.ico" --add-data "icon.ico;." roboparty_can_tool.py
+   pyinstaller --noconfirm --onefile --windowed --clean --icon="icon.ico" --add-data "icon.ico;." roboto_usb2can_tool.py
    ```
 
-   生成的文件位于 `scripts/dist/RobopartyCAN.exe`。
+   生成的文件位于 `scripts/dist/roboto_usb2can.exe`。
 
 ---
 
@@ -199,14 +199,14 @@ cansend can0 123#DEADBEEF
 
 ### 4. 运行测试脚本
 
-我们在 `scripts` 目录下提供了自动化测试脚本 `can_test.sh`，用于快速验证 CAN 接口功能。
+我们在 `scripts` 目录下提供了自动化测试脚本 `test_roboto_usb2can.sh`，用于快速验证 CAN 接口功能。
 
 ```bash
 # 赋予执行权限
-chmod +x scripts/can_test.sh
+chmod +x scripts/test_roboto_usb2can.sh
 
 # 运行测试
-./scripts/can_test.sh
+./scripts/test_roboto_usb2can.sh
 ```
 
 ---

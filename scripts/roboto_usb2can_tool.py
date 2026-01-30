@@ -228,7 +228,7 @@ class RobopartyCAN:
 class CANToolGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title(f"roboparty CAN 2.0 Host Tool v{VERSION}")
+        self.root.title(f"roboto_usb2can Host Tool v{VERSION}")
         self.root.geometry("1000x800")
         
         # Set icon
