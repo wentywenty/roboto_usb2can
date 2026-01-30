@@ -1,8 +1,8 @@
-# roboparty CAN FD 双通道适配器使用手册
+# roboparty CAN 2.0 适配器使用手册
 
 ## 📖 简介
 
-roboparty CAN FD 是一款基于 STM32G431 的单通道 CAN2.0 适配器，兼容开源的 `gs_usb` 协议（candleLight）。它支持 Windows 免驱使用（WinUSB）及 Linux 原生 SocketCAN 接口，适合开发调试及总线分析。
+roboparty CAN 2.0 是一款基于 STM32G431 的单通道 CAN2.0 适配器，兼容开源的 `gs_usb` 协议（candleLight）。它支持 Windows 免驱使用（WinUSB）及 Linux 原生 SocketCAN 接口，适合开发调试及总线分析。
 
 ---
 
@@ -195,6 +195,18 @@ candump can0
 
 # 发送
 cansend can0 123#DEADBEEF
+```
+
+### 4. 运行测试脚本
+
+我们在 `scripts` 目录下提供了自动化测试脚本 `can_test.sh`，用于快速验证 CAN 接口功能。
+
+```bash
+# 赋予执行权限
+chmod +x scripts/can_test.sh
+
+# 运行测试
+./scripts/can_test.sh
 ```
 
 ---
