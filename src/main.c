@@ -10,6 +10,7 @@
 #include <zephyr/drivers/can.h>
 #include <cannectivity/usb/class/gs_usb.h>
 #include "status_led.h"
+#include "version.h"
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
@@ -252,7 +253,7 @@ int main(void)
 		LOG_ERR("Failed to initialize status LED (err %d)", err);
 	}
 
-	printk("*** roboparty CAN FD adapter ***\n");
+	printk("*** roboparty CAN FD adapter v%s ***\n", APP_VERSION_STR);
 
 	/* Initialize CAN error monitoring */
 	for (int i = 0; i < ARRAY_SIZE(can_devices); i++) {
@@ -334,7 +335,7 @@ int main(void)
 	}
 
 	/* Set device version */
-	err = usbd_device_set_bcd_device(&usbd, 0x0100);
+	err = usbd_device_set_bcd_device(&usbd, APP_VERSION_BCD);
 	if (err != 0) {
 		LOG_ERR("failed to set bcdDevice (err %d)", err);
 		return err;

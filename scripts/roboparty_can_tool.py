@@ -6,6 +6,8 @@ Supports dual-channel CAN transmission and reception
 
 import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox
+import os
+import sys
 import usb.core
 import usb.util
 import threading
@@ -13,6 +15,7 @@ import time
 import struct
 from queue import Queue
 from datetime import datetime
+import sys
 
 # gs_usb protocol constants
 GS_USB_REQUEST_HOST_FORMAT = 0
@@ -23,6 +26,9 @@ GS_USB_REQUEST_BT_CONST = 5
 
 GS_USB_CHANNEL_MODE_RESET = 0
 GS_USB_CHANNEL_MODE_START = 1
+
+# Tool Version
+VERSION = "1.0.0"
 
 # CAN frame structure (corresponds to gs_host_frame in firmware)
 class CANFrame:
@@ -222,9 +228,25 @@ class RobopartyCAN:
 class CANToolGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("roboparty CAN FD Host Tool")
+        self.root.title(f"roboparty CAN 2.0 Host Tool v{VERSION}")
         self.root.geometry("1000x800")
         
+        # Set icon
+        try:
+            if getattr(sys, 'frozen', False):
+                # Valid for PyInstaller --onefile
+                base_path = sys._MEIPASS
+            else:
+                base_path = os.path.dirname(os.path.abspath(__file__))
+                
+            icon_path = os.path.join(base_path, "icon.ico")
+            if os.path.exists(icon_path):
+                self.root.iconbitmap(default=icon_path)
+            else:
+                print(f"Warning: Icon not found at {icon_path}")
+        except Exception as e:
+            print(f"Warning: Failed to set icon: {e}")
+
         # State
         self.is_connected = False
         self.is_bus_started = False
@@ -516,6 +538,13 @@ class CANToolGUI:
         except Exception as e:
             messagebox.showerror("Error", f"Send failed: {e}")
     
+    def stop_periodic(self):
+        """Stop periodic sending safely"""
+        self.periodic_var.set(False)
+        self.periodic_running = False
+        if self.periodic_thread:
+            self.periodic_thread.join(timeout=0.1)
+
     def toggle_periodic(self):
         if self.periodic_var.get():
             self.periodic_running = True

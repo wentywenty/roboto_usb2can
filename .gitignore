@@ -1,7 +1,10 @@
 build/
-.cache/
 dist/
-RobopartyCAN.spec
+
+.cache/
 .vscode/
+
 flasher/
 test/
+
+*.spec

@@ -24,11 +24,34 @@ roboparty CAN FD 是一款基于 STM32G431 的单通道 CAN2.0 适配器，兼�
 
 ### 1. 编译环境配置
 
-前提：确保已正确安装 [Zephyr SDK](https://docs.zephyrproject.org/latest/develop/getting_started/index.html)。
+**前提**：确保已正确安装 [Zephyr SDK](https://docs.zephyrproject.org/latest/develop/getting_started/index.html)。
 
-并配置 <https://github.com/CANnectivity/cannectivity>
+1. **配置 CANnectivity 模块**
 
-之后克隆 <https://github.com/wentywenty/roboparty_canfd>
+   在文件 `zephyr/submanifests/cannectivity.yaml` 并写入以下内容：
+
+   ```yaml
+   manifest:
+     projects:
+       - name: cannectivity
+         url: https://github.com/CANnectivity/cannectivity.git
+         revision: main
+         path: custom/cannectivity # adjust the path as needed
+   ```
+
+2. **更新工作区**
+
+   ```bash
+   west update
+   ```
+
+3. **获取项目源码**
+
+   将本仓库克隆到 `zephyr/samples` 目录：
+
+   ```bash
+   git clone https://github.com/wentywenty/roboparty_canfd samples/roboparty_canfd
+   ```
 
 ### 2. 编译
 
@@ -121,7 +144,25 @@ python roboparty_can_tool.py
 - **数据交互**:
   - **发送**: 支持向所有设备广播 (Target: All) 或向指定设备单发。支持 16 进制数据输入及周期性自动发送。
   - **接收**: 顶部日志区实时显示总线数据，自动标注数据来源设备编号 (`[Dev X]`)，并支持 ID 过滤。
-- **打包**: 如需生成独立 EXE，可使用 PyInstaller 进行打包。
+
+### 3. 打包为 EXE (可选)
+
+如果需要在没有 Python 环境的电脑上运行，可以打包为 EXE 文件。
+
+1. **安装打包工具**:
+
+   ```bash
+   pip install pyinstaller
+   ```
+
+2. **执行打包**:
+
+   ```bash
+   cd scripts
+   pyinstaller --noconfirm --onefile --windowed --clean --icon="icon.ico" --add-data "icon.ico;." roboparty_can_tool.py
+   ```
+
+   生成的文件位于 `scripts/dist/RobopartyCAN.exe`。
 
 ---
 
@@ -142,6 +183,8 @@ dmesg | grep gs_usb
 # 设置波特率 1Mbps 并启动
 sudo ip link set can0 up type can bitrate 1000000
 sudo ip link set can1 up type can bitrate 1000000
+sudo ip link set can2 up type can bitrate 1000000
+sudo ip link set can3 up type can bitrate 1000000
 ```
 
 ### 3. 测试收发 (需安装 can-utils)
