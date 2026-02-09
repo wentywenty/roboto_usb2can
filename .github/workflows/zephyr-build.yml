@@ -3,8 +3,21 @@ name: Zephyr Build
 on:
   push:
     branches: [main, master]
+    paths:
+      - "src/**"
+      - "boards/**"
+      - "CMakeLists.txt"
+      - "prj.conf"
+      - "west.yml"
+      - ".github/workflows/zephyr-build.yml"
   pull_request:
     branches: [main, master]
+    paths:
+      - "src/**"
+      - "boards/**"
+      - "CMakeLists.txt"
+      - "prj.conf"
+      - "west.yml"
 
 jobs:
   build:
@@ -19,22 +32,24 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/zephyr-sdk-0.17.4
-          key: zephyr-sdk-0.17.4-linux
+          key: zephyr-sdk-0.17.4-${{ runner.os }}
           restore-keys: zephyr-sdk-
 
       - name: Cache Python venv
         uses: actions/cache@v4
         with:
           path: ~/venv
-          key: venv-${{ runner.os }}-${{ hashFiles('**/requirements.txt') }}
+          key: venv-${{ runner.os }}-${{ github.run_id }}
           restore-keys: venv-${{ runner.os }}-
 
       - name: Cache Zephyr workspace
         uses: actions/cache@v4
         with:
           path: ~/work
-          key: zephyr-workspace-${{ hashFiles('west.yml') }}
-          restore-keys: zephyr-workspace-
+          key: zephyr-workspace-${{ hashFiles('west.yml') }}-${{ github.run_id }}
+          restore-keys: |
+            zephyr-workspace-${{ hashFiles('west.yml') }}-
+            zephyr-workspace-
 
       - name: Install system dependencies
         run: sudo apt update && sudo apt install -y ninja-build cmake python3-pip python3-venv git ccache
@@ -71,3 +86,25 @@ jobs:
           cd ~/work/samples/roboto_usb2can
           export ZEPHYR_SDK_INSTALL_DIR=~/zephyr-sdk-0.17.4
           ~/venv/bin/west build -b roboto_usb2can -- -DCMAKE_BUILD_TYPE=Release
+
+      - name: Generate release binary
+        run: |
+          cd ~/work/samples/roboto_usb2can/build
+          cmake --build . --target release_files
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: roboto_usb2can_firmware
+          path: ~/work/samples/roboto_usb2can/build/zephyr/roboto_usb2can_v*.bin
+          retention-days: 30
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ~/work/samples/roboto_usb2can/build/zephyr/roboto_usb2can_v*.bin
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

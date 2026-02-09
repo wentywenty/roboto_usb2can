@@ -1,7 +1,14 @@
 name: Doxygen to GitHub Pages
 on:
   push:
-    branches: [main, master] # Trigger on main branch pushes
+    branches: [main, master]
+    paths:
+      - "src/**"
+      - "boards/**"
+      - "*.md"
+      - "Doxyfile"
+      - "doxygen-guide.md"
+      - ".github/workflows/doxygen-gh-pages.yml"
 permissions:
   contents: write
 jobs:
