@@ -1,34 +1,37 @@
-# roboto_usb2can 适配器使用手册
+# roboto_usb2can Adapter User Manual
 
-## 📖 简介
+**[中文文档 / Chinese Documentation](readme_cn.md)**
 
-roboto_usb2can 是一款基于 STM32G431 的单通道 CAN2.0 固件，兼容开源的 `gs_usb` 协议（candleLight）。它支持 Windows 免驱使用（WinUSB）及 Linux 原生 SocketCAN 接口，适合开发调试及总线分析。
+## 📖 Introduction
+
+roboto_usb2can is a single-channel CAN2.0 firmware based on STM32G431, compatible with the open-source `gs_usb` protocol (candleLight). It supports Windows driver-free usage (WinUSB) and Linux native SocketCAN interface, suitable for development debugging and bus analysis.
 
 ---
 
-## 🔧 硬件规格
+## 🔧 Hardware Specifications
 
-- **MCU**: STM32G431CBT6 (Cortex-M0+ @ 64MHz)
-- **接口**:
+- **MCU**: STM32G431CBT6 (Cortex-M4+ @ 170MHz)
+- **Interface**:
   - 1x USB 2.0 Full Speed (Type-C)
   - 1x CAN2.0
-- **指示灯**:
-  - **蓝灯 (PC11)**: 系统状态指示
-  - **绿灯 (PA1)**: 数据收发指示
+- **Indicator LEDs**:
+  - **Blue LED (PC11)**: USB system status indication
+  - **Yellow LED (PA7)**: CAN system status indication
+  - **Green LED (PA1)**: Data transmission/reception indication
 
 ---
 
-## 🔨 固件编译与烧录
+## 🔨 Firmware Compilation and Flashing
 
-本项目基于 Zephyr RTOS 构建。
+This project is built on Zephyr RTOS.
 
-### 1. 编译环境配置
+### 1. Build Environment Setup
 
-**前提**：确保已正确安装 [Zephyr SDK](https://docs.zephyrproject.org/latest/develop/getting_started/index.html)。
+**Prerequisites**: Ensure [Zephyr SDK](https://docs.zephyrproject.org/latest/develop/getting_started/index.html) is properly installed.
 
-1. **配置 CANnectivity 模块**
+1. **Configure CANnectivity Module**
 
-   在文件 `zephyr/submanifests/cannectivity.yaml` 并写入以下内容：
+   Create file `zephyr/submanifests/cannectivity.yaml` with the following content:
 
    ```yaml
    manifest:
@@ -39,35 +42,41 @@ roboto_usb2can 是一款基于 STM32G431 的单通道 CAN2.0 固件，兼容开�
          path: custom/cannectivity # adjust the path as needed
    ```
 
-2. **更新工作区**
+2. **Update Workspace**
 
    ```bash
    west update
    ```
 
-3. **获取项目源码**
+3. **Get Project Source Code**
 
-   将本仓库克隆到 `zephyr/samples` 目录：
+   Clone this repository to the `zephyr/samples` directory:
 
    ```bash
    git clone https://github.com/wentywenty/roboto_usb2can samples/roboto_usb2can
    ```
 
-### 2. 编译
+### 2. Build
 
 ```bash
 cd roboto_usb2can
 west build -b roboto_usb2can
 ```
 
-### 3. 烧录
+### 3. Flashing
 
-本开发板配置了多种烧录器支持，请根据您使用的调试器选择命令：
+The board supports multiple debuggers. Choose the appropriate command based on your debugger:
 
-- **OpenOCD (推荐 CMSIS-DAP/ST-Link)**:
+- **STM32CubeProgrammer (Recommended for STLINK-V3MINIE)**:
 
   ```bash
-  west flash --runner openocd
+  west flash --runner stm32cubeprogrammer
+  ```
+
+- **Probe-rs**:
+
+  ```bash
+  west flash --runner probe-rs
   ```
 
 - **J-Link**:
@@ -82,155 +91,153 @@ west build -b roboto_usb2can
   west flash --runner pyocd
   ```
 
-- **STM32CubeProgrammer (官方工具)**:
+- **OpenOCD**:
 
   ```bash
-  west flash --runner stm32cubeprogrammer
-  ```
-
-- **Probe-rs**:
-
-  ```bash
-  west flash --runner probe-rs
+  west flash --runner openocd
   ```
 
 ---
 
-## 💡 LED 状态说明
+## 💡 LED Status Indication
 
-设备板载两个状态指示灯，分别指示系统状态与通信活动。
+The device has three onboard status indicator LEDs for USB status, CAN status, and communication activity.
 
-### 🔵 蓝灯 (PC11) - 系统状态
+### 🔵 Blue LED - USB Status
 
-| 状态 | 闪烁模式 | 说明 |
-|-----|---------|-----|
-| **初始化** | 快闪 3 次 | 系统上电启动 |
-| **空闲** | 慢闪 (0.1s 亮 / 1.9s 灭) | USB 已连接，CAN 通道关闭 |
-| **就绪** | 呼吸闪 (0.5s 亮 / 0.5s 灭) | CAN 通道已打开 (Channel Started) |
-| **错误** | 快速持续闪烁 | 系统或总线错误 |
+| State | Blink Pattern | Description |
+|-------|---------------|-------------|
+| **Ready** | Medium blink (0.5s on / 0.5s off) | USB connection normal, device ready |
+| **Error** | Fast blink (0.1s on / 0.1s off) | USB communication error |
 
-### 🟢 绿灯 (PA1) - 通信指示
+### 🟡 Yellow LED - CAN Status
 
-- **熄灭**: 总线空闲，无数据传输。
-- **闪烁**: 检测到 CAN 总线数据接收 (RX) 或发送 (TX)。
+| State | Blink Pattern | Description |
+|-------|---------------|-------------|
+| **Off** | Very slow blink (0.05s on / 3.95s off) | CAN channel closed or bus off |
+| **Active** | Medium blink (0.5s on / 0.5s off) | CAN channel opened, normal working |
+| **Warning** | Slow blink (0.2s on / 1.8s off) | CAN bus warning state |
+| **Error** | Fast blink (0.1s on / 0.1s off) | CAN bus error or error flood |
+
+### 🟢 Green LED - Communication Activity
+
+- **Off**: Bus idle, no data transmission
+- **Brief flash**: Detected CAN bus data reception (RX) or transmission (TX)
 
 ---
 
-## 🖥️ 上位机使用 (Windows)
+## 🖥️ Host Software Usage (Windows)
 
-Windows 下无需安装额外驱动，系统会自动识别为 WinUSB 设备。我们提供了 Python 编写的多设备管理上位机工具。
+No additional drivers needed on Windows. The system automatically recognizes it as a WinUSB device. We provide a Python-based multi-device management tool.
 
-### 1. 运行工具
+### 1. Running the Tool
 
-需要 Python 3.8+ 环境。
+Requires Python 3.8+ environment.
 
 ```bash
-# 安装依赖
+# Install dependencies
 pip install pyusb
-# 注意：Windows 用于通常自带 tkinter，Linux 可能需要 sudo apt install python3-tk
+# Note: Windows usually comes with tkinter, Linux may need: sudo apt install python3-tk
 
-# 运行 (确保 libusb-1.0.dll 在目录下或系统路径中)
+# Run (ensure libusb-1.0.dll is in directory or system path)
 cd scripts
 python roboto_usb2can_tool.py
 ```
 
-### 2. 功能说明
+### 2. Features
 
-- **多设备支持**: 专为 USB Hub 场景设计，支持同时连接并管理多个 CAN 适配器。底部列表实时显示设备总线地址及序列号。
-- **全局连接**: 点击 **Connect All** 按钮，自动扫描并连接所有在线设备。
-- **CAN 控制**:
-  - 支持统一设置波特率（默认 1Mbps）。
-  - 点击 **Start CAN** 可一键开启所有设备的 CAN 通道；点击 **Stop CAN** 一键关闭。
-- **数据交互**:
-  - **发送**: 支持向所有设备广播 (Target: All) 或向指定设备单发。支持 16 进制数据输入及周期性自动发送。
-  - **接收**: 顶部日志区实时显示总线数据，自动标注数据来源设备编号 (`[Dev X]`)，并支持 ID 过滤。
+- **Multi-device Support**: Designed for USB Hub scenarios, supports simultaneous connection and management of multiple CAN adapters. Bottom list shows real-time device bus addresses and serial numbers.
+- **Global Connection**: Click **Connect All** button to automatically scan and connect all online devices.
+- **CAN Control**:
+  - Supports unified bitrate setting (default 1Mbps).
+  - Click **Start CAN** to enable all device CAN channels at once; **Stop CAN** to disable all.
+- **Data Interaction**:
+  - **Send**: Supports broadcast to all devices (Target: All) or single device targeting. Supports hex data input and periodic auto-send.
+  - **Receive**: Top log area displays real-time bus data with automatic device number annotation (`[Dev X]`) and ID filtering support.
 
-### 3. 打包为 EXE (可选)
+### 3. Package as EXE (Optional)
 
-如果需要在没有 Python 环境的电脑上运行，可以打包为 EXE 文件。
+To run on computers without Python environment, package as EXE file.
 
-1. **安装打包工具**:
+1. **Install packaging tool**:
 
    ```bash
    pip install pyinstaller
    ```
 
-2. **执行打包**:
+2. **Execute packaging**:
 
    ```bash
    cd scripts
    pyinstaller --noconfirm --onefile --windowed --clean --icon="icon.ico" --add-data "icon.ico;." roboto_usb2can_tool.py
    ```
 
-   生成的文件位于 `scripts/dist/roboto_usb2can.exe`。
+   Generated file located at `scripts/dist/roboto_usb2can.exe`.
 
 ---
 
-## 🐧 Linux 使用 (SocketCAN)
+## 🐧 Linux Usage (SocketCAN)
 
-Linux 内核自带 `gs_usb` 驱动，即插即用。
+Linux kernel includes built-in `gs_usb` driver, plug and play.
 
-### 1. 检查设备
+### 1. Check Device
 
 ```bash
 dmesg | grep gs_usb
-# 应显示: Configuring for 2 channels
+# Should display: Configuring for 1 channels
 ```
 
-### 2. 启动接口
+### 2. Start Interface
 
 ```bash
-# 设置波特率 1Mbps 并启动
+# Set bitrate to 1Mbps and start
 sudo ip link set can0 up type can bitrate 1000000
-sudo ip link set can1 up type can bitrate 1000000
-sudo ip link set can2 up type can bitrate 1000000
-sudo ip link set can3 up type can bitrate 1000000
 ```
 
-### 3. 测试收发 (需安装 can-utils)
+### 3. Test Send/Receive (requires can-utils)
 
 ```bash
-# 接收
+# Receive
 candump can0
 
-# 发送
+# Send
 cansend can0 123#DEADBEEF
 ```
 
-### 4. 运行测试脚本
+### 4. Run Test Script
 
-我们在 `scripts` 目录下提供了自动化测试脚本 `test_roboto_usb2can.sh`，用于快速验证 CAN 接口功能。
+We provide automated test script `test_roboto_usb2can.sh` in the `scripts` directory for quick CAN interface verification.
 
 ```bash
-# 赋予执行权限
+# Grant execute permission
 chmod +x scripts/test_roboto_usb2can.sh
 
-# 运行测试
+# Run test
 ./scripts/test_roboto_usb2can.sh
 ```
 
 ---
 
-## 🔍 常见问题排查
+## 🔍 Troubleshooting
 
-**Q1: Windows 无法识别设备？**
+**Q1: Windows cannot recognize device?**
 
-- 检查 USB 线缆是否支持数据传输。
-- 检查设备管理器中是否有黄色感叹号，若有请手动更新驱动（选择 WinUSB）。
+- Check if USB cable supports data transmission.
+- Check Device Manager for yellow exclamation marks, manually update driver (select WinUSB) if present.
 
-**Q2: Python 工具提示 "Device not found"？**
+**Q2: Python tool shows "Device not found"?**
 
-- 确认 `libusb-1.0.dll` 是否存在。
-- Linux 下请检查 USB 权限 (`/etc/udev/rules.d/`)，确保当前用户有权访问 USB 设备。
+- Confirm `libusb-1.0.dll` exists.
+- On Linux, check USB permissions (`/etc/udev/rules.d/`), ensure current user has USB device access.
 
-**Q3: LED 持续快速闪烁？**
+**Q3: LED continuously fast blinking?**
 
-- 表示 CAN 总线错误。请检查：
-  1. 终端电阻是否已连接（CAN总线两端各需 120Ω）。
-  2. CAN_H / CAN_L 是否接反。
-  3. 波特率是否匹配。
+- Indicates CAN bus error. Check:
+  1. Are termination resistors connected (CAN bus requires 120Ω at both ends).
+  2. Are CAN_H / CAN_L wired correctly (not reversed).
+  3. Does bitrate match between devices.
 
-**Q4: 高波特率丢包？**
+**Q4: Packet loss at high bitrates?**
 
-- 尝试改用更短、质量更好的 USB 线缆。
-- 降低总线负载或发送频率。
+- Try using shorter, higher quality USB cables.
+- Reduce bus load or transmission frequency.

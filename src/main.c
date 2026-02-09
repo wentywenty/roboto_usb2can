@@ -1,114 +1,30 @@
-#include <zephyr/device.h>
-#include <zephyr/devicetree.h>
-#ifdef CONFIG_USB_DEVICE_STACK_NEXT
-#include <zephyr/usb/usbd.h>
-#include <zephyr/usb/msos_desc.h>
-#include <zephyr/sys/byteorder.h>
-#else
-#include <zephyr/usb/usb_device.h>
-#endif
-#include <zephyr/drivers/can.h>
-#include <cannectivity/usb/class/gs_usb.h>
-#include "status_led.h"
-#include "version.h"
+#include "roboto_usb2can.h"
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
-/* MSOS 2.0 Descriptors for WinUSB Support */
-#define COMPATIBLE_ID_WINUSB 'W', 'I', 'N', 'U', 'S', 'B', 0x00, 0x00
-/* gs_usb DeviceInterfaceGUID (candleLight compatible) */
-#define GS_USB_DEVICE_INTERFACE_GUID                                                               \
-	'{', 0x00, 'c', 0x00, '6', 0x00, 'e', 0x00, '5', 0x00, '1', 0x00, '5', 0x00, 'a', 0x00,    \
-		'2', 0x00, '-', 0x00, '8', 0x00, 'd', 0x00, 'c', 0x00, '6', 0x00, '-', 0x00, '4',  \
-		0x00, 'f', 0x00, 'c', 0x00, '4', 0x00, '-', 0x00, 'a', 0x00, '0', 0x00, '3', 0x00, \
-		'c', 0x00, '-', 0x00, '9', 0x00, '3', 0x00, '2', 0x00, '5', 0x00, '5', 0x00, '5',  \
-		0x00, 'd', 0x00, '6', 0x00, '8', 0x00, 'e', 0x00, '6', 0x00, '}', 0x00, 0x00, 0x00
+#ifdef CONFIG_USB_DEVICE_STACK_NEXT
+/* New USB stack: Define USB device context */
+USBD_DEVICE_DEFINE(usbd, DEVICE_DT_GET(DT_NODELABEL(zephyr_udc0)), 0x1D50, 0x606F);
 
-/* MSOS 2.0 Descriptor Structure */
-struct msos2_descriptor {
-	struct msosv2_descriptor_set_header header;
-	struct msosv2_compatible_id compatible_id;
-	struct msosv2_guids_property guids_property;
-} __packed;
+USBD_DESC_LANG_DEFINE(lang);
+USBD_DESC_MANUFACTURER_DEFINE(mfr, "wentywenty");
+USBD_DESC_PRODUCT_DEFINE(product, "roboto_usb2can");
+USBD_DESC_SERIAL_NUMBER_DEFINE(sn);
+USBD_DESC_CONFIG_DEFINE(fs_config_desc, "Full-Speed Configuration");
+USBD_CONFIGURATION_DEFINE(fs_config, 0, 250, &fs_config_desc);
+#endif
 
-static const struct msos2_descriptor msos2_desc = {
-	.header =
-		{
-			.wLength = sizeof(struct msosv2_descriptor_set_header),
-			.wDescriptorType = MS_OS_20_SET_HEADER_DESCRIPTOR,
-			.dwWindowsVersion = 0x06030000, /* Windows 8.1+ */
-			.wTotalLength = sizeof(struct msos2_descriptor),
-		},
-	.compatible_id =
-		{
-			.wLength = sizeof(struct msosv2_compatible_id),
-			.wDescriptorType = MS_OS_20_FEATURE_COMPATIBLE_ID,
-			.CompatibleID = {COMPATIBLE_ID_WINUSB},
-		},
-	.guids_property =
-		{
-			.wLength = sizeof(struct msosv2_guids_property),
-			.wDescriptorType = MS_OS_20_FEATURE_REG_PROPERTY,
-			.wPropertyDataType = MS_OS_20_PROPERTY_DATA_REG_MULTI_SZ,
-			.wPropertyNameLength = 42,
-			.PropertyName = {DEVICE_INTERFACE_GUIDS_PROPERTY_NAME},
-			.wPropertyDataLength = 80,
-			.bPropertyData = {GS_USB_DEVICE_INTERFACE_GUID},
-		},
-};
-
-/* BOS Descriptor: USB 2.0 Extension */
-static const struct usb_bos_capability_lpm bos_cap_lpm = {
-	.bLength = sizeof(struct usb_bos_capability_lpm),
-	.bDescriptorType = USB_DESC_DEVICE_CAPABILITY,
-	.bDevCapabilityType = USB_BOS_CAPABILITY_EXTENSION,
-	.bmAttributes = 0UL,
-};
-
-/* BOS Descriptor: Microsoft OS 2.0 Platform */
-struct usb_bos_msosv2 {
-	struct usb_bos_platform_descriptor platform;
-	struct usb_bos_capability_msos cap;
-} __packed;
-
-static const struct usb_bos_msosv2 bos_cap_msosv2 = {
-	.platform =
-		{
-			.bLength = sizeof(struct usb_bos_msosv2),
-			.bDescriptorType = USB_DESC_DEVICE_CAPABILITY,
-			.bDevCapabilityType = USB_BOS_CAPABILITY_PLATFORM,
-			.bReserved = 0,
-			.PlatformCapabilityUUID =
-				{
-					/* MS OS 2.0 Platform Capability ID */
-					0xDF,
-					0x60,
-					0xDD,
-					0xD8,
-					0x89,
-					0x45,
-					0xC7,
-					0x4C,
-					0x9C,
-					0xD2,
-					0x65,
-					0x9D,
-					0x9E,
-					0x64,
-					0x8A,
-					0x9F,
-				},
-		},
-	.cap =
-		{
-			.dwWindowsVersion = sys_cpu_to_le32(0x06030000),
-			.wMSOSDescriptorSetTotalLength = sys_cpu_to_le16(sizeof(msos2_desc)),
-			.bMS_VendorCode = 0x01, /* Vendor Request Code */
-			.bAltEnumCode = 0x00,
-		},
-};
-
-/* Vendor Request Handler */
+/**
+ * @brief Microsoft OS 2.0 descriptor vendor request handler
+ *
+ * Handles Windows-specific vendor requests for MSOS 2.0 descriptors,
+ * enabling automatic WinUSB driver binding without manual driver installation.
+ *
+ * @param ctx USB device context
+ * @param setup USB setup packet containing the request
+ * @param buf Network buffer for response data
+ * @return 0 on success, -ENOTSUP for unsupported requests
+ */
 static int msos_vendor_handler(const struct usbd_context *const ctx,
 			       const struct usb_setup_packet *const setup,
 			       struct net_buf *const buf)
@@ -127,37 +43,17 @@ USBD_DESC_BOS_DEFINE(bos_lpm, sizeof(bos_cap_lpm), &bos_cap_lpm);
 USBD_DESC_BOS_VREQ_DEFINE(bos_msosv2, sizeof(bos_cap_msosv2), &bos_cap_msosv2, 0x01,
 			  msos_vendor_handler, NULL);
 
-/* CAN error frame monitoring configuration */
-#define CAN_ERR_FRAME_THRESHOLD 50   /* Max 50 error frames allowed per second */
-#define CAN_ERR_WINDOW_MS       1000 /* Statistics window 1 second */
-#define CAN_ERR_PASSIVE_LIMIT   10   /* Force Bus-Off after 10 accumulated ERROR_PASSIVE */
-
-/* CAN error monitor (per channel) */
-struct can_error_monitor {
-	uint32_t err_frame_count;   /* Error frame count in current window */
-	uint32_t err_passive_count; /* Accumulated ERROR_PASSIVE count */
-	int64_t window_start_ms;    /* Statistics window start time */
-	bool throttled;             /* Whether throttling triggered */
-	bool forced_busoff;         /* Whether Bus-Off forced */
-};
-
-static struct can_error_monitor err_monitors[1] = {0}; /* Single channel, extensible */
-static const struct device *can_devices[] = {DEVICE_DT_GET(DT_NODELABEL(fdcan1))};
-
-#ifdef CONFIG_USB_DEVICE_STACK_NEXT
-
-/* New USB stack: Define USB device context */
-USBD_DEVICE_DEFINE(usbd, DEVICE_DT_GET(DT_NODELABEL(zephyr_udc0)), 0x1D50, 0x606F);
-
-USBD_DESC_LANG_DEFINE(lang);
-USBD_DESC_MANUFACTURER_DEFINE(mfr, "wentywenty");
-USBD_DESC_PRODUCT_DEFINE(product, "roboto_usb2can");
-USBD_DESC_SERIAL_NUMBER_DEFINE(sn);
-USBD_DESC_CONFIG_DEFINE(fs_config_desc, "Full-Speed Configuration");
-USBD_CONFIGURATION_DEFINE(fs_config, 0, 250, &fs_config_desc);
-#endif
-
-/* CAN state change callback - Error monitoring and protection */
+/**
+ * @brief CAN state change callback - Error monitoring and protection
+ *
+ * This callback monitors CAN bus state changes and implements error protection
+ * mechanisms including error frame flood detection and automatic bus-off recovery.
+ *
+ * @param dev Pointer to the CAN device
+ * @param state Current CAN bus state
+ * @param err_cnt CAN error counters (TX/RX)
+ * @param user_data User data pointer (channel index)
+ */
 static void can_state_change_callback(const struct device *dev, enum can_state state,
 				      struct can_bus_err_cnt err_cnt, void *user_data)
 {
@@ -184,9 +80,10 @@ static void can_state_change_callback(const struct device *dev, enum can_state s
 			LOG_ERR("CH%d: Error frame flood detected (%u/s), throttling", ch,
 				mon->err_frame_count);
 			mon->throttled = true;
-			status_led_set(LED_STATUS_ERROR);
+			/* USB error and CAN error */
+			status_led_usb_set(LED_USB_ERROR);
+			status_led_can_set(CAN_LED_ERROR);
 		}
-
 		/* Actively enter Bus-Off to protect bus */
 		if (!mon->forced_busoff) {
 			LOG_ERR("CH%d: Forcing Bus-Off to prevent bus freeze", ch);
@@ -203,17 +100,23 @@ static void can_state_change_callback(const struct device *dev, enum can_state s
 			err_cnt.rx_err_cnt);
 		mon->err_passive_count = 0; /* Reset count after recovery */
 		mon->forced_busoff = false;
+		/* CAN back to normal */
+		status_led_can_set(CAN_LED_ACTIVE);
 		break;
 
 	case CAN_STATE_ERROR_WARNING:
 		LOG_WRN("CH%d: CAN ERROR_WARNING (TEC=%u, REC=%u)", ch, err_cnt.tx_err_cnt,
 			err_cnt.rx_err_cnt);
+		/* CAN warning state */
+		status_led_can_set(CAN_LED_WARNING);
 		break;
 
 	case CAN_STATE_ERROR_PASSIVE:
 		mon->err_passive_count++;
 		LOG_WRN("CH%d: CAN ERROR_PASSIVE #%u (TEC=%u, REC=%u)", ch, mon->err_passive_count,
 			err_cnt.tx_err_cnt, err_cnt.rx_err_cnt);
+		/* CAN error state */
+		status_led_can_set(CAN_LED_ERROR);
 
 		/* Persistent ERROR_PASSIVE -> active Bus-Off */
 		if (mon->err_passive_count > CAN_ERR_PASSIVE_LIMIT) {
@@ -221,7 +124,9 @@ static void can_state_change_callback(const struct device *dev, enum can_state s
 				mon->err_passive_count);
 			can_stop(dev);
 			mon->forced_busoff = true;
-			status_led_set(LED_STATUS_ERROR);
+			/* USB error and CAN off */
+			status_led_usb_set(LED_USB_ERROR);
+			status_led_can_set(CAN_LED_OFF);
 		}
 		break;
 
@@ -229,15 +134,30 @@ static void can_state_change_callback(const struct device *dev, enum can_state s
 		LOG_ERR("CH%d: CAN BUS_OFF (TEC=%u, REC=%u)", ch, err_cnt.tx_err_cnt,
 			err_cnt.rx_err_cnt);
 		mon->forced_busoff = true;
-		status_led_set(LED_STATUS_ERROR);
+		/* USB error and CAN off */
+		status_led_usb_set(LED_USB_ERROR);
+		status_led_can_set(CAN_LED_OFF);
 		break;
 
 	case CAN_STATE_STOPPED:
 		LOG_INF("CH%d: CAN STOPPED", ch);
+		/* CAN stopped */
+		status_led_can_set(CAN_LED_OFF);
 		break;
 	}
 }
 
+/**
+ * @brief Main application entry point
+ *
+ * Initializes the roboto_usb2can adapter including:
+ * - Status LED system
+ * - CAN error monitoring
+ * - GS-USB protocol stack
+ * - USB device configuration (WinUSB support)
+ *
+ * @return 0 on success, negative error code on failure
+ */
 int main(void)
 {
 	const struct device *gs_usb = DEVICE_DT_GET(DT_NODELABEL(gs_usb0));
@@ -376,7 +296,7 @@ int main(void)
 	LOG_INF("roboto_usb2can initialized with %u channels", ARRAY_SIZE(channels));
 
 	/* Set LED to USB ready state */
-	status_led_set(LED_STATUS_USB_READY);
+	status_led_usb_set(LED_USB_READY);
 	LOG_INF("WinUSB support enabled - plug and play on Windows 8.1+");
 
 	return 0;

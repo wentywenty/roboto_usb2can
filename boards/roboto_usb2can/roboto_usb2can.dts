@@ -21,32 +21,38 @@
 	aliases {
 		led0 = &blue_led;
 		led1 = &green_led;
+		led2 = &yellow_led;
 	};
 
 	leds: leds {
 		compatible = "gpio-leds";
 
-		blue_led: led_2 {
+		blue_led: led_1 {
 			gpios = <&gpioa 15 GPIO_ACTIVE_LOW>;
-			label = "blue-status D2";
+			label = "blue-status D1";
 		};
 
-		green_led: led_3 {
+		green_led: led_2 {
 			gpios = <&gpioa 0 GPIO_ACTIVE_LOW>;
-			label = "green-word D3";
+			label = "green-word D2";
+		};
+
+		yellow_led: led_3 {
+			gpios = <&gpioa 7 GPIO_ACTIVE_LOW>;
+			label = "yellow-word D3";
 		};
 	};
 
     transceiver0: can-phy0 {
         compatible = "ti,iso1050", "can-transceiver-gpio";
-        enable-gpios = <&gpioc 13 GPIO_ACTIVE_LOW>; 
+        enable-gpios = <&gpioc 13 GPIO_ACTIVE_LOW>;
         max-bitrate = <5000000>;
         #phy-cells = <0>;
     };
 
     transceiver1: can-phy1 {
         compatible = "ti,iso1050", "can-transceiver-gpio";
-        enable-gpios = <&gpioc 14 GPIO_ACTIVE_LOW>; 
+        enable-gpios = <&gpioc 14 GPIO_ACTIVE_LOW>;
         max-bitrate = <5000000>;
         #phy-cells = <0>;
     };
@@ -75,7 +81,6 @@
 
 &clk_hsi48 {
     status = "okay";
-    // crs-usb-sof;
 };
 
 /* Adjust the pll for a SYSTEM Clock of 160 MHz  */
@@ -117,7 +122,6 @@ zephyr_udc0: &usb {
 stm32_lp_tick_source: &lptim1 {
 	clocks = <&rcc STM32_CLOCK(APB1, 31)>,
 		 <&rcc STM32_SRC_LSI LPTIM1_SEL(3)>;
-		//  <&rcc STM32_SRC_LSE LPTIM1_SEL(3)>;
 	status = "okay";
 };
 
