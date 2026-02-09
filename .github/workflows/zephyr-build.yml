@@ -54,6 +54,7 @@ jobs:
         run: |
           cd ~/work
           ~/venv/bin/west zephyr-export
+          ~/venv/bin/python -m pip install -r zephyr/scripts/requirements.txt
           ~/venv/bin/west packages pip --install
 
       - name: Install Zephyr SDK
