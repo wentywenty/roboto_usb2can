@@ -1,0 +1,24 @@
+# udev rules for roboto_usb2can device
+# Place this file in /etc/udev/rules.d/ on Linux systems
+# After copying, run: sudo udevadm control --reload-rules && sudo udevadm trigger
+
+# roboto_usb2can USB-CAN Adapter
+# VID: 0x1D50 (OpenMoko), PID: 0x606F (candleLight compatible)
+SUBSYSTEM=="usb", ATTR{idVendor}=="1d50", ATTR{idProduct}=="606f", MODE="0666", GROUP="plugdev", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="1d50", ATTR{idProduct}=="606f", ATTR{manufacturer}=="wentywenty", ATTR{product}=="roboto_usb2can", MODE="0666", GROUP="plugdev", TAG+="uaccess"
+
+# Alternative rule using environment variables
+SUBSYSTEM=="usb", ENV{ID_VENDOR_ID}=="1d50", ENV{ID_MODEL_ID}=="606f", MODE="0666", GROUP="plugdev", TAG+="uaccess"
+
+# Create symlink for easier access
+SUBSYSTEM=="usb", ATTR{idVendor}=="1d50", ATTR{idProduct}=="606f", SYMLINK+="roboto_usb2can%n"
+
+# For CAN network interfaces created by gs_usb driver
+SUBSYSTEM=="net", ATTRS{idVendor}=="1d50", ATTRS{idProduct}=="606f", TAG+="systemd", ENV{SYSTEMD_ALIAS}+="/sys/subsystem/net/devices/can%n"
+
+# Allow access for users in dialout and plugdev groups
+KERNEL=="ttyUSB*", ATTRS{idVendor}=="1d50", ATTRS{idProduct}=="606f", MODE="0666", GROUP="dialout"
+KERNEL=="ttyACM*", ATTRS{idVendor}=="1d50", ATTRS{idProduct}=="606f", MODE="0666", GROUP="dialout"
+
+# For raw USB access (libusb)
+SUBSYSTEM=="usb", ATTR{idVendor}=="1d50", ATTR{idProduct}=="606f", TAG+="uaccess", RUN+="/bin/chmod 0666 /dev/bus/usb/%b/%k"

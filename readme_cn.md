@@ -8,13 +8,13 @@ roboto_usb2can 是一款基于 STM32G431 的单通道 CAN2.0 固件，兼容开�
 
 ## 🔧 硬件规格
 
-- **MCU**: STM32G431CBT6 (Cortex-M0+ @ 64MHz)
+- **MCU**: STM32G431CBT6 (Cortex-M4+ @ 170MHz)
 - **接口**:
   - 1x USB 2.0 Full Speed (Type-C)
   - 1x CAN2.0
 - **指示灯**:
-  - **蓝灯 (PC11)**: usb系统状态指示
-  - **黄灯 (PA7)**: can系统状态指示
+  - **蓝灯 (PC11)**: USB 系统状态指示
+  - **黄灯 (PA7)**: CAN 系统状态指示
   - **绿灯 (PA1)**: 数据收发指示
 
 ---
@@ -182,7 +182,7 @@ Linux 内核自带 `gs_usb` 驱动，即插即用。
 
 ```bash
 dmesg | grep gs_usb
-# 应显示: Configuring for 2 channels
+# 应显示: Configuring for 1 channels
 ```
 
 ### 2. 启动接口
@@ -190,9 +190,6 @@ dmesg | grep gs_usb
 ```bash
 # 设置波特率 1Mbps 并启动
 sudo ip link set can0 up type can bitrate 1000000
-sudo ip link set can1 up type can bitrate 1000000
-sudo ip link set can2 up type can bitrate 1000000
-sudo ip link set can3 up type can bitrate 1000000
 ```
 
 ### 3. 测试收发 (需安装 can-utils)
@@ -219,26 +216,77 @@ chmod +x scripts/test_roboto_usb2can.sh
 
 ---
 
+### 5. 安装 udev 规则
+
+请使用项目内的 [scripts/99-roboto-usb2can.rules](scripts/99-roboto-usb2can.rules) 文件。
+更详细说明请参考 [udev-setup.md](udev-setup.md)。
+
+#### 安装步骤
+
+1. **复制规则文件**
+   ```bash
+   sudo cp scripts/99-roboto-usb2can.rules /etc/udev/rules.d/
+   sudo chmod 644 /etc/udev/rules.d/99-roboto-usb2can.rules
+   ```
+2. **重新加载udev规则**
+   ```bash
+   sudo udevadm control --reload-rules
+   sudo udevadm trigger
+   ```
+3. **（可选）将当前用户加入plugdev和dialout组**
+   ```bash
+   sudo usermod -a -G plugdev,dialout $USER
+   # 重新登录后生效
+   ```
+
+#### 功能说明
+- 普通用户可直接访问设备，无需sudo
+- 自动为设备创建 `/dev/roboto_usb2can*` 符号链接
+- 支持SocketCAN自动生成can0接口
+- 兼容libusb、gs_usb、ttyUSB/ttyACM等多种访问方式
+
+#### 验证方法
+1. 插入设备后，执行：
+   ```bash
+   lsusb | grep 1d50:606f
+   dmesg | grep gs_usb
+   ls -l /dev/roboto_usb2can*
+   ip link show type can
+   ```
+2. 使用 `candump can0`、`cansend can0 123#DEADBEEF` 测试CAN通信
+
+#### 故障排查
+- 设备无权限：确认用户已加入plugdev组，或手动 `sudo chmod 666 /dev/roboto_usb2can*`
+- 没有can0接口：检查内核gs_usb驱动是否加载，或查看dmesg日志
+- 规则不生效：确认规则文件名以`99-`开头，且权限为644，重插设备或重启udev
+
+#### 兼容性
+- 适用于主流Linux发行版（Ubuntu, Debian, Fedora, Arch等）
+- 需要内核自带gs_usb驱动（3.16及以上）
+- 支持SocketCAN、libusb、tty等多种访问方式
+
+#### 卸载方法
+```bash
+sudo rm /etc/udev/rules.d/99-roboto-usb2can.rules
+sudo udevadm control --reload-rules
+sudo udevadm trigger
+```
+
 ## 🔍 常见问题排查
 
 **Q1: Windows 无法识别设备？**
 
 - 检查 USB 线缆是否支持数据传输。
-- 检查设备管理器中是否有黄色感叹号，若有请手动更新驱动（选择 WinUSB）。
+- 检查设备管理器中是否有黄色感叹号，若有请手动更新驱动（使用 zadig 选择 WinUSB）。
 
-**Q2: Python 工具提示 "Device not found"？**
-
-- 确认 `libusb-1.0.dll` 是否存在。
-- Linux 下请检查 USB 权限 (`/etc/udev/rules.d/`)，确保当前用户有权访问 USB 设备。
-
-**Q3: LED 持续快速闪烁？**
+**Q2: LED 持续快速闪烁？**
 
 - 表示 CAN 总线错误。请检查：
   1. 终端电阻是否已连接（CAN总线两端各需 120Ω）。
   2. CAN_H / CAN_L 是否接反。
   3. 波特率是否匹配。
 
-**Q4: 高波特率丢包？**
+**Q3: 高波特率丢包？**
 
 - 尝试改用更短、质量更好的 USB 线缆。
 - 降低总线负载或发送频率。

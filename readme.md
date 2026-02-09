@@ -216,6 +216,65 @@ chmod +x scripts/test_roboto_usb2can.sh
 ./scripts/test_roboto_usb2can.sh
 ```
 
+### 5. Install udev Rules
+
+Use the rule file [scripts/99-roboto-usb2can.rules](scripts/99-roboto-usb2can.rules).
+For more details, see [udev-setup.md](udev-setup.md).
+
+#### Installation Steps
+
+1. **Copy the rule file**
+  ```bash
+  sudo cp scripts/99-roboto-usb2can.rules /etc/udev/rules.d/
+  sudo chmod 644 /etc/udev/rules.d/99-roboto-usb2can.rules
+  ```
+2. **Reload udev rules**
+  ```bash
+  sudo udevadm control --reload-rules
+  sudo udevadm trigger
+  ```
+3. **(Optional) Add user to plugdev and dialout groups**
+  ```bash
+  sudo usermod -a -G plugdev,dialout $USER
+  # Re-login required
+  ```
+
+#### What It Does
+
+- Allows non-root access to the device
+- Creates `/dev/roboto_usb2can*` symlinks
+- Works with SocketCAN, libusb, gs_usb, ttyUSB/ttyACM access paths
+
+#### Verify
+
+1. Plug in the device and run:
+  ```bash
+  lsusb | grep 1d50:606f
+  dmesg | grep gs_usb
+  ls -l /dev/roboto_usb2can*
+  ip link show type can
+  ```
+2. Test CAN traffic with `candump can0` / `cansend can0 123#DEADBEEF`
+
+#### Troubleshooting
+
+- Permission denied: ensure the user is in plugdev/dialout, or `sudo chmod 666 /dev/roboto_usb2can*`
+- No can0: check if gs_usb is loaded, inspect dmesg
+- Rules not applied: ensure filename starts with `99-`, permissions are 644, replug device or reload udev
+
+#### Compatibility
+
+- Works on mainstream Linux distros (Ubuntu, Debian, Fedora, Arch)
+- Requires kernel gs_usb driver (3.16+)
+
+#### Uninstall
+
+```bash
+sudo rm /etc/udev/rules.d/99-roboto-usb2can.rules
+sudo udevadm control --reload-rules
+sudo udevadm trigger
+```
+
 ---
 
 ## 🔍 Troubleshooting
