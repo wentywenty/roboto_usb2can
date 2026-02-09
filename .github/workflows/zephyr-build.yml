@@ -39,17 +39,15 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/venv
-          key: venv-${{ runner.os }}-${{ github.run_id }}
+          key: venv-${{ runner.os }}-${{ hashFiles('zephyr/scripts/requirements.txt', 'scripts/requirements.txt') }}
           restore-keys: venv-${{ runner.os }}-
 
-      - name: Cache Zephyr workspace
+      - name: Cache ccache
         uses: actions/cache@v4
         with:
-          path: ~/work
-          key: zephyr-workspace-${{ hashFiles('west.yml') }}-${{ github.run_id }}
-          restore-keys: |
-            zephyr-workspace-${{ hashFiles('west.yml') }}-
-            zephyr-workspace-
+          path: ~/.ccache
+          key: ccache-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: ccache-${{ runner.os }}-
 
       - name: Install system dependencies
         run: sudo apt update && sudo apt install -y ninja-build cmake python3-pip python3-venv git ccache
@@ -85,6 +83,8 @@ jobs:
         run: |
           cd ~/work/samples/roboto_usb2can
           export ZEPHYR_SDK_INSTALL_DIR=~/zephyr-sdk-0.17.4
+          export CCACHE_DIR=~/.ccache
+          export CCACHE_BASEDIR=~/work
           ~/venv/bin/west build -b roboto_usb2can -- -DCMAKE_BUILD_TYPE=Release
 
       - name: Generate release binary
