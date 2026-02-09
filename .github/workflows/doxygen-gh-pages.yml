@@ -1,27 +1,29 @@
 name: Doxygen to GitHub Pages
 on:
   push:
-    branches: [ main, master ]  # 主分支提交时触发
+    branches: [main, master] # Trigger on main branch pushes
+permissions:
+  contents: write
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      # 1. 拉取代码
+      # 1. Checkout code
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2. 安装Doxygen和graphviz
+      # 2. Install Doxygen and Graphviz
       - name: Install Doxygen
         run: sudo apt update && sudo apt install -y doxygen graphviz
 
-      # 3. 生成Doxygen文档
+      # 3. Generate Doxygen docs
       - name: Generate Doxygen docs
         run: doxygen Doxyfile
 
-      # 4. 部署到gh-pages分支
+      # 4. Deploy to gh-pages branch
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}  # GitHub自动生成的token，无需手动配置
-          publish_dir: ./docs/html  # Doxygen生成的文档目录
-          publish_branch: gh-pages  # 部署到gh-pages分支
+          github_token: ${{ secrets.GITHUB_TOKEN }} # GitHub-provided token
+          publish_dir: ./docs/html # Doxygen output directory
+          publish_branch: gh-pages # Deploy to gh-pages

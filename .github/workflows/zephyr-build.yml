@@ -1,0 +1,73 @@
+name: Zephyr Build
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Cache Zephyr SDK
+        uses: actions/cache@v4
+        with:
+          path: zephyr-sdk-0.17.4
+          key: zephyr-sdk-0.17.4-linux
+          restore-keys: zephyr-sdk-
+
+      - name: Cache Python venv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: venv-${{ runner.os }}-
+
+      - name: Cache build directory
+        uses: actions/cache@v4
+        with:
+          path: build
+          key: build-${{ github.ref }}-${{ github.run_number }}
+          restore-keys: build-${{ github.ref }}-
+
+      - name: Install system dependencies
+        run: sudo apt update && sudo apt install -y ninja-build cmake python3-pip python3-venv git ccache
+
+      - name: Setup Python venv
+        run: |
+          python3 -m venv .venv
+          . .venv/bin/activate
+          pip install --upgrade pip west
+
+      - name: Initialize west workspace
+        run: |
+          . .venv/bin/activate
+          west init -l .
+          west update
+
+      - name: Setup Zephyr environment
+        run: |
+          . .venv/bin/activate
+          west zephyr-export
+          west packages pip --install
+
+      - name: Install Zephyr SDK
+        run: |
+          if [ ! -d zephyr-sdk-0.17.4 ]; then
+            wget -q https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v0.17.4/zephyr-sdk-0.17.4_linux-x86_64.tar.xz
+            tar xf zephyr-sdk-0.17.4_linux-x86_64.tar.xz
+            rm zephyr-sdk-0.17.4_linux-x86_64.tar.xz
+          fi
+          ./zephyr-sdk-0.17.4/setup.sh -t arm-zephyr-eabi -h
+
+      - name: Build roboto_usb2can
+        run: |
+          . .venv/bin/activate
+          export ZEPHYR_SDK_INSTALL_DIR=$PWD/zephyr-sdk-0.17.4
+          west build -b roboto_usb2can -- -DCMAKE_BUILD_TYPE=Release
