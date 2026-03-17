@@ -180,21 +180,28 @@ To run on computers without Python environment, package as EXE file.
 
 Linux kernel includes built-in `gs_usb` driver, plug and play.
 
-### 1. Check Device
+### 1. Install Python Dependencies (for host tool)
+
+```bash
+sudo apt install python3-pip python3-tk
+pip install pyusb
+```
+
+### 2. Check Device
 
 ```bash
 dmesg | grep gs_usb
 # Should display: Configuring for 1 channels
 ```
 
-### 2. Start Interface
+### 3. Start Interface
 
 ```bash
 # Set bitrate to 1Mbps and start
 sudo ip link set can0 up type can bitrate 1000000
 ```
 
-### 3. Test Send/Receive (requires can-utils)
+### 4. Test Send/Receive (requires can-utils)
 
 ```bash
 # Receive
@@ -204,7 +211,7 @@ candump can0
 cansend can0 123#DEADBEEF
 ```
 
-### 4. Run Test Script
+### 5. Run Test Script
 
 We provide automated test script `test_roboto_usb2can.sh` in the `scripts` directory for quick CAN interface verification.
 
@@ -216,10 +223,19 @@ chmod +x scripts/test_roboto_usb2can.sh
 ./scripts/test_roboto_usb2can.sh
 ```
 
-### 5. Install udev Rules
+### 6. Install udev Rules
 
 Use the rule file [scripts/99-roboto-usb2can.rules](scripts/99-roboto-usb2can.rules).
 For more details, see [udev-setup.md](udev-setup.md).
+
+#### Quick Install (from workspace root)
+
+```bash
+sudo cp roboto_usb2can/scripts/99-roboto-usb2can.rules /etc/udev/rules.d/
+sudo chmod 644 /etc/udev/rules.d/99-roboto-usb2can.rules
+sudo udevadm control --reload-rules
+sudo udevadm trigger
+```
 
 #### Installation Steps
 
@@ -274,6 +290,7 @@ sudo rm /etc/udev/rules.d/99-roboto-usb2can.rules
 sudo udevadm control --reload-rules
 sudo udevadm trigger
 ```
+
 
 ---
 

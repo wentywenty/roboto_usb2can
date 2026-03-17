@@ -178,21 +178,28 @@ python roboto_usb2can_tool.py
 
 Linux 内核自带 `gs_usb` 驱动，即插即用。
 
-### 1. 检查设备
+### 1. 安装 Python 依赖（用于上位机工具）
+
+```bash
+sudo apt install python3-pip python3-tk
+pip install pyusb
+```
+
+### 2. 检查设备
 
 ```bash
 dmesg | grep gs_usb
 # 应显示: Configuring for 1 channels
 ```
 
-### 2. 启动接口
+### 3. 启动接口
 
 ```bash
 # 设置波特率 1Mbps 并启动
 sudo ip link set can0 up type can bitrate 1000000
 ```
 
-### 3. 测试收发 (需安装 can-utils)
+### 4. 测试收发 (需安装 can-utils)
 
 ```bash
 # 接收
@@ -202,7 +209,7 @@ candump can0
 cansend can0 123#DEADBEEF
 ```
 
-### 4. 运行测试脚本
+### 5. 运行测试脚本
 
 我们在 `scripts` 目录下提供了自动化测试脚本 `test_roboto_usb2can.sh`，用于快速验证 CAN 接口功能。
 
@@ -216,10 +223,19 @@ chmod +x scripts/test_roboto_usb2can.sh
 
 ---
 
-### 5. 安装 udev 规则
+### 6. 安装 udev 规则
 
 请使用项目内的 [scripts/99-roboto-usb2can.rules](scripts/99-roboto-usb2can.rules) 文件。
 更详细说明请参考 [udev-setup.md](udev-setup.md)。
+
+#### 快速安装（在工作区根目录执行）
+
+```bash
+sudo cp roboto_usb2can/scripts/99-roboto-usb2can.rules /etc/udev/rules.d/
+sudo chmod 644 /etc/udev/rules.d/99-roboto-usb2can.rules
+sudo udevadm control --reload-rules
+sudo udevadm trigger
+```
 
 #### 安装步骤
 
