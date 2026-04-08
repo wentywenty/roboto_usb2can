@@ -31,8 +31,8 @@ jobs:
       - name: Cache Zephyr SDK
         uses: actions/cache@v4
         with:
-          path: ~/zephyr-sdk-0.17.4
-          key: zephyr-sdk-0.17.4-${{ runner.os }}
+          path: ~/zephyr-sdk-1.0.1
+          key: zephyr-sdk-1.0.1-${{ runner.os }}
           restore-keys: zephyr-sdk-
 
       - name: Cache Python venv
@@ -72,17 +72,17 @@ jobs:
 
       - name: Install Zephyr SDK
         run: |
-          if [ ! -d ~/zephyr-sdk-0.17.4 ]; then
-            wget -q https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v0.17.4/zephyr-sdk-0.17.4_linux-x86_64.tar.xz -O /tmp/sdk.tar.xz
+          if [ ! -d ~/zephyr-sdk-1.0.1 ]; then
+            wget -q https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v1.0.1/zephyr-sdk-1.0.1_linux-x86_64.tar.xz -O /tmp/sdk.tar.xz
             tar xf /tmp/sdk.tar.xz -C ~/
             rm /tmp/sdk.tar.xz
           fi
-          ~/zephyr-sdk-0.17.4/setup.sh -t arm-zephyr-eabi -h
+          ~/zephyr-sdk-1.0.1/setup.sh -t arm-zephyr-eabi -h
 
       - name: Build roboto_usb2can
         run: |
           cd ~/work/samples/roboto_usb2can
-          export ZEPHYR_SDK_INSTALL_DIR=~/zephyr-sdk-0.17.4
+          export ZEPHYR_SDK_INSTALL_DIR=~/zephyr-sdk-1.0.1
           export CCACHE_DIR=~/.ccache
           export CCACHE_BASEDIR=~/work
           ~/venv/bin/west build -b roboto_usb2can -- -DCMAKE_BUILD_TYPE=Release
