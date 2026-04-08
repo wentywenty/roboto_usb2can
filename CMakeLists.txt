@@ -10,7 +10,7 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(roboto_usb2can)
 
 # Version definition
-set(APP_VERSION_MAJOR 2)
+set(APP_VERSION_MAJOR 3)
 set(APP_VERSION_MINOR 0)
 set(APP_VERSION_PATCH 0)
 
