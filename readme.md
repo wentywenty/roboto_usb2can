@@ -8,6 +8,20 @@ roboto_usb2can is a single-channel CAN2.0 firmware based on STM32G431, compatibl
 
 ---
 
+
+## 📦 Firmware Download
+
+Pre-compiled firmware (.bin) files are available on the [GitHub Releases page](https://github.com/wentywenty/roboto_usb2can/releases).
+Each release provides the corresponding version of the bin file as an attachment, which can be flashed directly to the device.
+
+**How to use:**
+
+1. Go to the [Releases page](https://github.com/wentywenty/roboto_usb2can/releases).
+2. Download the latest `roboto_usb2can_xxx.bin` firmware file.
+3. Flash it using your preferred tool as described in the "Firmware Compilation and Flashing" section below.
+
+---
+
 ## 🔧 Hardware Specifications
 
 - **MCU**: STM32G431CBT6 (Cortex-M4+ @ 170MHz)
