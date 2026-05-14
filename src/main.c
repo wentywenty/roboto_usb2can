@@ -13,7 +13,6 @@ USBD_DESC_SERIAL_NUMBER_DEFINE(sn);
 USBD_DESC_CONFIG_DEFINE(fs_config_desc, "Full-Speed Configuration");
 USBD_CONFIGURATION_DEFINE(fs_config, 0, 250, &fs_config_desc);
 #endif
-
 /**
  * @brief Microsoft OS 2.0 descriptor vendor request handler
  *
